@@ -1,6 +1,6 @@
 /*
  * Supersonic.ino
- * electromagnet is on pin 13
+ * electromagnet is on pin 13 (Arduino Uno)
  */
 
 #include <BalloonModule.h>
