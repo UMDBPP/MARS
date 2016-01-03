@@ -35,7 +35,7 @@ void setup()
 void loop()
 {
     // use PrintStatusAfterLaunch to stop altitude output until launch happens (20 meters and above over baseline)
-    module.printStatusAfterLaunch();
+    altitude = module.printStatusAfterLaunch();
     
     // Set electromagnet to LOW if altitude has not yet been reached
     if (altitude < releaseAltitude || MET < minReleaseTime)
