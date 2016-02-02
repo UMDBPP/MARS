@@ -3,7 +3,9 @@
  * electromagnet is on pin 13 (Arduino Uno)
  */
 
+#include <Arduino.h>
 #include <BalloonModule.h>
+
 BalloonModule module;
 double altitude;
 const double releaseAltitude = 22860;    // in meters
@@ -20,7 +22,7 @@ void setup()
     module.initialize();
     
     // print extra module-specific information
-    printTime();
+    module.printTime();
     Serial.print("EM cutoff will occur at ");
     module.printMetersAndFeet(releaseAltitude);
     Serial.print(" or after max time of ");
@@ -63,7 +65,7 @@ void loop()
 void releaseEMCutdown(String cause)
 {
     digitalWrite(electromagnetPin, HIGH);
-    printTime();
+    module.printTime();
     Serial.print(
             "MODULE RELEASED (triggered by " + cause + ")." + "\n"
                     + "System going to sleep until recovery.");
