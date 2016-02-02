@@ -28,6 +28,9 @@ local.properties
 # PDT-specific
 .buildpath
 
+# Arduino
+spec.d
+
 
 #################
 ## Visual Studio
