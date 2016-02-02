@@ -8,7 +8,7 @@
 
 BalloonModule module;
 double altitude;
-const double releaseAltitude = 22860;    // in meters
+const double releaseAltitude = 36575;    // in meters
 const int electromagnetPin = 13;    // Pin 13 has the electromagnet attached to it
 const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
 const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
