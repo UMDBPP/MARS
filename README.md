@@ -1,5 +1,5 @@
 # SupersonicCutdown
-###University of Maryland Balloon Launch Program
+###University of Maryland Balloon Payload Program
 Arduino code for Supersonic cutdown module (Uno board)
 
 ##Includes
