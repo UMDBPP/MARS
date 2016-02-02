@@ -1,9 +1,6 @@
 # SupersonicCutdown
 ###University of Maryland Balloon Payload Program
-Arduino code for Supersonic cutdown module (Uno board)
-
-###Arduino IDE
-- https://www.arduino.cc/en/Main/Software
+Arduino code for Supersonic cutdown module (Uno board). Use Arduino IDE to upload (https://www.arduino.cc/en/Main/Software)
 
 ##Dependencies
 - BalloonModule (https://github.com/zacharyburnett/BalloonModule.git)
