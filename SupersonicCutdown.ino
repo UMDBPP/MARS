@@ -6,7 +6,7 @@
 #include <Arduino.h>
 #include <BalloonModule.h>
 
-BalloonModule module;
+BalloonModuleCommonUtilities module;
 double altitude;
 const double releaseAltitude = 36575;    // in meters
 const int electromagnetPin = 13;    // Pin 13 has the electromagnet attached to it
@@ -22,9 +22,9 @@ void setup()
     module.initialize();
     
     // print extra module-specific information
-    module.printTime();
+    module.printFormattedTime();
     Serial.print("EM cutoff will occur at ");
-    module.printMetersAndFeet(releaseAltitude);
+    module.printDualUnits(releaseAltitude);
     Serial.print(" or after max time of ");
     Serial.print(maxReleaseTime / 3600);
     Serial.print(" hours.");
@@ -37,7 +37,7 @@ void setup()
 void loop()
 {
     // use PrintStatusAfterLaunch to stop altitude output until launch happens (20 meters and above over baseline)
-    altitude = module.printStatusAfterLaunch();
+    altitude = module.printStatusDuringFlight();
     
     // Set electromagnet to LOW if altitude has not yet been reached
     if (altitude < releaseAltitude || MET < minReleaseTime)
@@ -65,7 +65,7 @@ void loop()
 void releaseEMCutdown(String cause)
 {
     digitalWrite(electromagnetPin, HIGH);
-    module.printTime();
+    module.printFormattedTime();
     Serial.print(
             "MODULE RELEASED (triggered by " + cause + ")." + "\n"
                     + "System going to sleep until recovery.");
