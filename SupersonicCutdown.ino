@@ -5,10 +5,10 @@
 
 #include <Arduino.h>
 #include <BalloonModuleCommonUtilities.h>
-#include <SFE_BMP180.h>
+#include <BMP180.h>
 
 BalloonModuleCommonUtilities module;
-SFE_BMP180 pressureSensor;
+BMP180 pressureSensor;
 
 const double releaseAltitude = 36575;    // in meters
 const int electromagnetPin = 13;    // Pin 13 has the electromagnet attached to it
@@ -40,7 +40,7 @@ void loop()
     module.printStatusDuringFlight();
     
     // Set electromagnet to LOW if altitude has not yet been reached
-    if (altitude < releaseAltitude || MET < minReleaseTime)
+    if (altitude < releaseAltitude || (millis() / 1000) < minReleaseTime)
     {
         digitalWrite(electromagnetPin, LOW);    // set the electromagnet to off (LOW is the voltage level)
         release = 0;
@@ -55,7 +55,7 @@ void loop()
     {
         releaseEMCutdown("pressure sensor value");
     }
-    else if (millis() > maxReleaseTime)
+    else if ((millis() / 1000) > maxReleaseTime)
     {
         releaseEMCutdown("max time exceeded");
     }
