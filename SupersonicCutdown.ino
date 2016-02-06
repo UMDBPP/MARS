@@ -4,25 +4,24 @@
  */
 
 #include <Arduino.h>
-#include <BalloonModule.h>
+#include <BalloonModuleCommonUtilities.h>
+#include <BMP180.h>
 
-BalloonModule module;
-double altitude;
+BalloonModuleCommonUtilities module;
+BMP180 pressureSensor;
+
 const double releaseAltitude = 36575;    // in meters
 const int electromagnetPin = 13;    // Pin 13 has the electromagnet attached to it
 const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
 const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
 const int releaseTolerance = 5;    // time in seconds of sensor value above release altitude after which to detach
+double altitude();
 int release = 0;
-bool isLaunched = false;
 
 void setup()
 {
-    // main initialization of pressure sensor
-    module.initialize();
-    
     // print extra module-specific information
-    module.printTime();
+    module.printFormattedTime();
     Serial.print("EM cutoff will occur at ");
     module.printMetersAndFeet(releaseAltitude);
     Serial.print(" or after max time of ");
@@ -37,10 +36,11 @@ void setup()
 void loop()
 {
     // use PrintStatusAfterLaunch to stop altitude output until launch happens (20 meters and above over baseline)
-    altitude = module.printStatusAfterLaunch();
+    altitude = pressureSensor.getAltitude();
+    module.printStatusDuringFlight();
     
     // Set electromagnet to LOW if altitude has not yet been reached
-    if (altitude < releaseAltitude || MET < minReleaseTime)
+    if (altitude < releaseAltitude || (millis() / 1000) < minReleaseTime)
     {
         digitalWrite(electromagnetPin, LOW);    // set the electromagnet to off (LOW is the voltage level)
         release = 0;
@@ -55,7 +55,7 @@ void loop()
     {
         releaseEMCutdown("pressure sensor value");
     }
-    else if (MET > maxReleaseTime)
+    else if ((millis() / 1000) > maxReleaseTime)
     {
         releaseEMCutdown("max time exceeded");
     }
@@ -65,7 +65,7 @@ void loop()
 void releaseEMCutdown(String cause)
 {
     digitalWrite(electromagnetPin, HIGH);
-    module.printTime();
+    module.printFormattedTime();
     Serial.print(
             "MODULE RELEASED (triggered by " + cause + ")." + "\n"
                     + "System going to sleep until recovery.");
