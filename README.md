@@ -1,6 +1,7 @@
-#SupersonicCutdown
-##Arduino sketch for Supersonic EM Cutdown module (Arduino Uno with BMP180 pressure sensor attached)
-###Developed for the Space Systems Laboratory at the University of Maryland
+#Supersonic EM Cutdown Module
+##Developed for the Space Systems Laboratory at the University of Maryland
+
+Board: Arduino Uno connected to BMP180 pressure sensor
 
 ##Pins
 electromagnet is on pin 13 (Arduino Uno)
