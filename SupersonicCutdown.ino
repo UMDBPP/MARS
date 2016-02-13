@@ -10,10 +10,10 @@
  */
 
 #include <Arduino.h>
-#include <BalloonModuleCommonUtilities.h>
+#include <Balloonduino.h>
 #include <BMP180.h>
 
-BalloonModuleCommonUtilities module;
+Balloonduino module;
 BMP180 pressureSensor;
 
 const double releaseAltitude = 36575;    // in meters
