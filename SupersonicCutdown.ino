@@ -21,7 +21,7 @@ const int electromagnetPin = 13;    // Pin 13 has the electromagnet attached to 
 const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
 const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
 const int releaseTolerance = 5;    // time in seconds of sensor value above release altitude after which to detach
-double altitude();
+double altitude;
 int release = 0;
 
 void setup()
@@ -34,17 +34,17 @@ void setup()
     Serial.print(maxReleaseTime / 3600);
     Serial.print(" hours.");
     Serial.println();
-    
+
     // initialize the electromagnet pin (digital) as output.
     pinMode(electromagnetPin, OUTPUT);
 }
 
 void loop()
 {
-    // use PrintStatusAfterLaunch to stop altitude output until launch happens (20 meters and above over baseline)
+    // stop altitude output until launch happens (above 20 meters over baseline)
     altitude = pressureSensor.getAltitude();
     module.printStatusDuringFlight();
-    
+
     // Set electromagnet to LOW if altitude has not yet been reached
     if (altitude < releaseAltitude || (millis() / 1000) < minReleaseTime)
     {
@@ -55,7 +55,7 @@ void loop()
     {
         release++;    // constitutes one loop (one second) of being at or above release altitude
     }
-    
+
     // Release electromagnet if altitude trigger or max time
     if (release > 5)
     {
