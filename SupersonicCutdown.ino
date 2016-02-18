@@ -21,12 +21,13 @@ const int electromagnetPin = 13;    // Pin 13 has the electromagnet attached to 
 const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
 const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
 const int releaseTolerance = 5;    // time in seconds of sensor value above release altitude after which to detach
-double altitude;
+double altitude = 0;
 int release = 0;
 
 void setup()
 {
     // print extra module-specific information
+    Serial.println();
     module.printFormattedTime();
     Serial.print("EM cutoff will occur at ");
     module.printMetersAndFeet(releaseAltitude);
@@ -43,7 +44,7 @@ void loop()
 {
     // stop altitude output until launch happens (above 20 meters over baseline)
     altitude = pressureSensor.getAltitude();
-    module.printStatusDuringFlight();
+    module.printStatusDuringFlight(0);
 
     // Set electromagnet to LOW if altitude has not yet been reached
     if (altitude < releaseAltitude || (millis() / 1000) < minReleaseTime)
@@ -75,7 +76,7 @@ void releaseEMCutdown(String cause)
     Serial.print(
             "MODULE RELEASED (triggered by " + cause + ")." + "\n"
                     + "System going to sleep until recovery.");
-    module.printAltitude();
+    module.printAltitude(altitude);
     Serial.println();
     while (1)
     {
