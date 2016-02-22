@@ -26,6 +26,7 @@ int release = 0;
 
 void setup()
 {
+    Serial.begin(9600);
     // print extra module-specific information
     Serial.println();
     module.printFormattedTime();
