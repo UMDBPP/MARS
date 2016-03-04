@@ -1,6 +1,5 @@
 /*
- * EMCutdown.ino
- * EM Cutdown module: Arduino Uno with BMP180 pressure sensor attached
+ * Cutdown.ino
  * electromagnet is on pin 13
  * pressure sensor pins:
  * green wire -> SDA
@@ -11,10 +10,8 @@
 
 #include <Arduino.h>
 #include <Balloonduino.h>
-#include <BMP180.h>
 
 Balloonduino module;
-BMP180 pressureSensor;
 
 const double releaseAltitude = 36575;    // in meters
 const int electromagnetPin = 13;    // Pin 13 has the electromagnet attached to it
@@ -30,7 +27,7 @@ void setup()
     // print extra module-specific information
     Serial.println();
     module.printFormattedTime();
-    Serial.print("EM cutoff will occur at ");
+    Serial.print("Release will occur at ");
     module.printMetersAndFeet(releaseAltitude);
     Serial.print(" or after max time of ");
     Serial.print(maxReleaseTime / 3600);
@@ -39,18 +36,18 @@ void setup()
 
     // initialize the electromagnet pin (digital) as output.
     pinMode(electromagnetPin, OUTPUT);
+    pinMode(electromagnetPin, LOW);
 }
 
 void loop()
 {
     // stop altitude output until launch happens (above 20 meters over baseline)
-    altitude = pressureSensor.getAltitude();
+    altitude = module.getAltitude();
     module.printStatusDuringFlight(0);
 
-    // Set electromagnet to LOW if altitude has not yet been reached
+    // Set cutdown to hold if altitude has not yet been reached
     if (altitude < releaseAltitude || (millis() / 1000) < minReleaseTime)
     {
-        digitalWrite(electromagnetPin, LOW);    // set the electromagnet to off (LOW is the voltage level)
         release = 0;
     }
     else
