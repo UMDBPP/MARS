@@ -1,7 +1,7 @@
 /*
- * Supersonic.ino
+ * EMCutdown.ino
  * EM Cutdown module: Arduino Uno with BMP180 pressure sensor attached
- * electromagnet is on pin 13 (Arduino Uno)
+ * electromagnet is on pin 13
  * pressure sensor pins:
  * green wire -> SDA
  * blue wire -> SCL
