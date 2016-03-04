@@ -1,4 +1,4 @@
-#Supersonic EM Cutdown Module
+#EM Cutdown Module
 ##Developed for the Space Systems Laboratory at the University of Maryland
 
 Board: Arduino Uno connected to BMP180 pressure sensor
