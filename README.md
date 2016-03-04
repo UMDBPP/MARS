@@ -1,4 +1,4 @@
-#EM Cutdown Module
+#Cutdown Module
 ##Developed for the Space Systems Laboratory at the University of Maryland
 
 Board: Arduino connected to BMP180 pressure sensor
