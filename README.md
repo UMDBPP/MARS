@@ -1,10 +1,10 @@
 #EM Cutdown Module
 ##Developed for the Space Systems Laboratory at the University of Maryland
 
-Board: Arduino Uno connected to BMP180 pressure sensor
+Board: Arduino connected to BMP180 pressure sensor
 
 ##Pins
-electromagnet is on pin 13 (Arduino Uno)
+electromagnet is on pin 13
 BMP180 green wire -> SDA
 BMP180 blue wire -> SCL
 BMP180 white wire -> 3.3v
