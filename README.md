@@ -1,15 +1,6 @@
 #Cutdown Module
 ##Developed for the Space Systems Laboratory at the University of Maryland
 
-Board: Arduino connected to BMP180 pressure sensor
-
-##Pins
-electromagnet is on pin 13
-BMP180 green wire -> SDA
-BMP180 blue wire -> SCL
-BMP180 white wire -> 3.3v
-BMP180 black wire -> GND
-
 ##Installation
 Copy this folder into your_arduino_workspace/ and use the Arduino IDE (https://www.arduino.cc/en/Main/Software) to upload
 
