@@ -42,6 +42,22 @@ void setup()
     }
 }
 
+// Releases module and prints verification with given cause for release
+void releaseCutdown(String cause)
+{
+    // attempt 3 times
+    for (int count = 0; count < 3; count++)
+    {
+        digitalWrite(electromagnetPin, HIGH);
+        delay(2500);
+        digitalWrite(electromagnetPin, LOW);
+        delay(2500);
+    }
+    pressureSensor.print(
+            "MODULE RELEASED (triggered by " + cause + ") at "
+                    + String(altitude) + "m.");
+}
+
 void loop()
 {
     if (status != 0)
@@ -63,20 +79,4 @@ void loop()
         status = pressureSensor.begin();
     }
     delay(1000);
-}
-
-// Releases module and prints verification with given cause for release
-void releaseCutdown(String cause)
-{
-    // attempt 3 times
-    for (int count = 0; count < 3; count++)
-    {
-        digitalWrite(electromagnetPin, HIGH);
-        delay(2500);
-        digitalWrite(electromagnetPin, LOW);
-        delay(2500);
-    }
-    pressureSensor.print(
-            "MODULE RELEASED (triggered by " + cause + ") at "
-                    + String(altitude) + "m.");
 }
