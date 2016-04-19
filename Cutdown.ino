@@ -8,6 +8,7 @@
  * black wire -> GND
  */
 
+#include <Arduino.h>
 #include <BMP180.h>
 
 const double releaseAltitude = 36575;    // in meters
@@ -34,9 +35,8 @@ void setup()
     if (status != 0)
     {
         // print extra module-specific information
-        Serial.println(
-                pressureSensor.getMissionTimeString()
-                        + " Release will occur at " + String(releaseAltitude)
+        pressureSensor.print(
+                "Release will occur at " + String(releaseAltitude)
                         + "m or after max time of "
                         + String(maxReleaseTime / 3600) + " hours.");
     }
@@ -72,13 +72,11 @@ void releaseCutdown(String cause)
     for (int count = 0; count < 3; count++)
     {
         digitalWrite(electromagnetPin, HIGH);
-        Serial.println(
-                pressureSensor.getMissionTimeString()
-                        + " MODULE RELEASED (triggered by " + cause + ") at "
-                        + String(altitude) + "m.");
         delay(2500);
         digitalWrite(electromagnetPin, LOW);
         delay(2500);
     }
+    pressureSensor.print(
+            "MODULE RELEASED (triggered by " + cause + ") at "
+                    + String(altitude) + "m.");
 }
-
