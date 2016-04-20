@@ -12,10 +12,10 @@
 #include <BMP180.h>
 
 const double releaseAltitude = 36575;    // in meters
-const int electromagnetPin = 3;  // Pin 13 has the electromagnet attached to it
-const int minReleaseTime = 30 * 60; // Minimum time in seconds before release is allowed to occur (30 minutes)
-const int maxReleaseTime = 5 * 3600; // Maximum time in seconds before release will occur (5 hours)
-const int releaseTolerance = 5; // time in seconds of sensor value above release altitude after which to detach
+const int electromagnetPin = 8;    // Pin 13 has the electromagnet attached to it
+const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
+const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
+const int releaseTolerance = 5;    // time in seconds of sensor value above release altitude after which to detach
 double altitude = 0;
 int release = 0;
 char status;
@@ -64,7 +64,7 @@ void loop()
     {
         altitude = pressureSensor.getAltitude();
 
-        if ((millis() / 1000) > maxReleaseTime)
+        if ( (millis() / 1000) > maxReleaseTime)
         {
             releaseCutdown("max time exceeded");
         }
