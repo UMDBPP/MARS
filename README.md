@@ -1,5 +1,5 @@
-#GANONDORF Cutdown
-##Gravity-Assisted Nearspace Operations Node for Downward-Oriented Release and Fall
+#GANONDORF Cutdown Module
+###Gravity-Assisted Nearspace Operations Node for Downward-Oriented Release and Fall
 ###Developed for the Space Systems Laboratory at the University of Maryland
 
 ##Installation
