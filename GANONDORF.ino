@@ -1,5 +1,5 @@
 /*
- * Cutdown.ino
+ * GANONDORF.ino
  * electromagnet is on pin 13
  * pressure sensor pins:
  * green wire -> SDA
