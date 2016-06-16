@@ -11,11 +11,10 @@
 #include <Arduino.h>
 #include <BMP180.h>
 
-const double releaseAltitude = 36575;    // in meters
+const double releaseAltitude = 3048;    // in meters
 const int electromagnetPin = 8;    // Pin 13 has the electromagnet attached to it
 const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
 const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
-const int releaseTolerance = 5;    // time in seconds of sensor value above release altitude after which to detach
 double altitude = 0;
 int release = 0;
 char status;
@@ -26,6 +25,9 @@ void setup()
 {
     Serial.begin(9600);
 
+    pinMode(A0, OUTPUT);
+    analogWrite(A0, 675);
+
     // initialize the electromagnet pin (digital) as output.
     pinMode(electromagnetPin, OUTPUT);
     digitalWrite(electromagnetPin, LOW);
@@ -35,7 +37,7 @@ void setup()
     if (status != 0)
     {
         // print extra module-specific information
-        pressureSensor.print(
+        pressureSensor.log(
                 "Release will occur at " + String(releaseAltitude)
                         + "m or after max time of "
                         + String(maxReleaseTime / 3600) + " hours.");
@@ -45,15 +47,20 @@ void setup()
 // Releases module and prints verification with given cause for release
 void releaseCutdown(String cause)
 {
-    // attempt 3 times
+    // iterate 3 times
     for (int count = 0; count < 3; count++)
     {
+        // pulse pin to HIGH for 6 seconds
         digitalWrite(electromagnetPin, HIGH);
-        delay(2500);
+        delay(6000);
+
+        // pulse pin to LOW for 1 second
         digitalWrite(electromagnetPin, LOW);
-        delay(2500);
+        delay(1000);
     }
-    pressureSensor.print(
+
+    // log release and cause
+    pressureSensor.log(
             "MODULE RELEASED (triggered by " + cause + ") at "
                     + String(altitude) + "m.");
 }
@@ -68,10 +75,12 @@ void loop()
         {
             releaseCutdown("max time exceeded");
         }
-        else if (altitude > releaseAltitude
-                && (millis() / 1000) > minReleaseTime)
+        else if (altitude > releaseAltitude)
         {
-            releaseCutdown("altitude value");
+            if (altitude > releaseAltitude)
+            {
+                releaseCutdown("altitude value");
+            }
         }
     }
     else
