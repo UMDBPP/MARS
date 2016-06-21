@@ -1,7 +1,8 @@
 /*
  * GANONDORF.ino
- * electromagnet is on pin 13
- * pressure sensor pins:
+ * Pulse to release pin will release cutdown
+ *
+ * BMP180 pressure sensor pins:
  * green wire -> SDA
  * blue wire -> SCL
  * white wire -> 3.3v
@@ -11,10 +12,12 @@
 #include <Arduino.h>
 #include <BMP180.h>
 
+#define releasePin 8 // release pin
+
 const double releaseAltitude = 3048;    // in meters
-const int electromagnetPin = 8;    // Pin 13 has the electromagnet attached to it
 const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
 const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
+const int pulseLength = 20;    // Time in seconds for the cutdown to pulse
 double altitude = 0;
 int release = 0;
 char status;
@@ -28,9 +31,9 @@ void setup()
     pinMode(A0, OUTPUT);
     analogWrite(A0, 675);
 
-    // initialize the electromagnet pin (digital) as output.
-    pinMode(electromagnetPin, OUTPUT);
-    digitalWrite(electromagnetPin, LOW);
+    // initialize the release pin (digital) as output.
+    pinMode(releasePin, OUTPUT);
+    digitalWrite(releasePin, LOW);
 
     status = pressureSensor.begin();
 
@@ -47,17 +50,12 @@ void setup()
 // Releases module and prints verification with given cause for release
 void releaseCutdown(String cause)
 {
-    // iterate 3 times
-    for (int count = 0; count < 3; count++)
-    {
-        // pulse pin to HIGH for 6 seconds
-        digitalWrite(electromagnetPin, HIGH);
-        delay(6000);
+    // Set pin to HIGH for 20 seconds
+    digitalWrite(releasePin, HIGH);
+    delay(20000);
 
-        // pulse pin to LOW for 1 second
-        digitalWrite(electromagnetPin, LOW);
-        delay(1000);
-    }
+    // turn cutdown off again
+    digitalWrite(releasePin, LOW);
 
     // log release and cause
     pressureSensor.log(
