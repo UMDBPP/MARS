@@ -69,7 +69,7 @@ void loop()
     {
         altitude = pressureSensor.getAltitude();
 
-        if ( (millis() / 1000) > maxReleaseTime)
+        if ((millis() / 1000) > maxReleaseTime)
         {
             releaseCutdown("max time exceeded");
         }
