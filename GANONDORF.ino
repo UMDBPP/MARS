@@ -1,89 +1,88 @@
 /*
  * GANONDORF.ino
- * Pulse to release pin will release cutdown
- *
- * BMP180 pressure sensor pins:
- * green wire -> SDA
- * blue wire -> SCL
- * white wire -> 3.3v
- * black wire -> GND
+ * Linear actuator releases a loop of string on command
  */
 
 #include <Arduino.h>
-#include <BMP180.h>
+#include <Cutdown.h>
 
-#define releasePin 8 // release pin
+#define ACTUATOR_PIN 8   // actuator pin
+#define XBEE_ADDR 04     // XBee channel
 
-const double releaseAltitude = 3048;    // in meters
-const int minReleaseTime = 30 * 60;    // Minimum time in seconds before release is allowed to occur (30 minutes)
-const int maxReleaseTime = 5 * 3600;    // Maximum time in seconds before release will occur (5 hours)
-const int pulseLength = 20;    // Time in seconds for the cutdown to pulse
-double altitude = 0;
-int release = 0;
+const int maxReleaseSeconds = 0.5 * 3600;    // Release timeout override
+const int pulseSeconds = 60;         // Seconds for the actuator to run
 char status;
 
-BMP180 pressureSensor;
+Cutdown cutdown;
 
 void setup()
 {
     Serial.begin(9600);
 
-    pinMode(A0, OUTPUT);
-    analogWrite(A0, 675);
+    // initialize the trigger pin (digital) as output and set to low
+    pinMode(ACTUATOR_PIN, OUTPUT);
+    digitalWrite(ACTUATOR_PIN, LOW);
 
-    // initialize the release pin (digital) as output.
-    pinMode(releasePin, OUTPUT);
-    digitalWrite(releasePin, LOW);
-
-    status = pressureSensor.begin();
+    // initialize cutdown library
+    status = cutdown.begin();
 
     if (status != 0)
     {
         // print extra module-specific information
-        pressureSensor.log(
-                "Release will occur at " + String(releaseAltitude)
-                        + "m or after max time of "
-                        + String(maxReleaseTime / 3600) + " hours.");
+        log("MODULE INITIALIZED: max release time: " + String(maxReleaseSeconds / 3600) + " hours.");
     }
-}
-
-// Releases module and prints verification with given cause for release
-void releaseCutdown(String cause)
-{
-    // Set pin to HIGH for 20 seconds
-    digitalWrite(releasePin, HIGH);
-    delay(20000);
-
-    // turn cutdown off again
-    digitalWrite(releasePin, LOW);
-
-    // log release and cause
-    pressureSensor.log(
-            "MODULE RELEASED (triggered by " + cause + ") at "
-                    + String(altitude) + "m.");
 }
 
 void loop()
 {
-    if (status != 0)
-    {
-        altitude = pressureSensor.getAltitude();
+    cutdown.check_input();
 
-        if ( (millis() / 1000) > maxReleaseTime)
-        {
-            releaseCutdown("max time exceeded");
-        }
-        else if (altitude > releaseAltitude)
-        {
-            if (altitude > releaseAltitude)
-            {
-                releaseCutdown("altitude value");
-            }
-        }
-    }
-    else
+    if (cutdown.cutdown_is_released())
     {
-        status = pressureSensor.begin();
+        fire();
     }
-    delay(1000);
+}
+
+void fire()
+{
+    // if the system is armed, release cutdown
+    if (cutdown.system_is_armed())
+    {
+        // disarm the system to prevent repeated firing
+        cutdown.disarm_system();
+
+        digitalWrite(ACTUATOR_PIN, HIGH);
+        delay(pulseSeconds * 1000);
+        digitalWrite(ACTUATOR_PIN, LOW);
+
+        cutdown.send_release_confirmation();
+
+        log("MODULE RELEASED");
+    }
+}
+
+void log(String message)
+{
+    byte seconds = (millis() / 1000) % 60;
+    byte minutes = seconds / 60;
+    byte hours = minutes / 60;
+
+    String time_string = "T+";
+    if (hours < 10)
+    {
+        time_string += "0";
+    }
+    time_string += String(hours) + ":";
+    if (minutes < 10)
+    {
+        time_string += "0";
+    }
+    time_string += String(minutes) + ":";
+    if (seconds < 10)
+    {
+        time_string += "0";
+    }
+    time_string += String(seconds);
+
+    Serial.println("[" + time_string + "] " + message);
 }
