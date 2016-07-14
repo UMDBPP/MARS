@@ -37,27 +37,21 @@ void loop()
 {
     cutdown.check_input();
 
-    if (cutdown.cutdown_is_released())
-    {
-        fire();
-    }
-}
-
-void fire()
-{
-    // if the system is armed, release cutdown
     if (cutdown.system_is_armed())
     {
-        // disarm the system to prevent repeated firing
-        cutdown.disarm_system();
+        if (cutdown.release)
+        {
+            digitalWrite(ACTUATOR_PIN, HIGH);
+            delay(pulseSeconds * 1000);
+            digitalWrite(ACTUATOR_PIN, LOW);
 
-        digitalWrite(ACTUATOR_PIN, HIGH);
-        delay(pulseSeconds * 1000);
-        digitalWrite(ACTUATOR_PIN, LOW);
+            cutdown.send_release_confirmation();
 
-        cutdown.send_release_confirmation();
+            log("MODULE RELEASED");
 
-        log("MODULE RELEASED");
+            // disarm the system to prevent repeated firing
+            cutdown.disarm_system();
+        }
     }
 }
 
