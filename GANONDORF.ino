@@ -29,7 +29,7 @@ void setup()
     if (status != 0)
     {
         // print extra module-specific information
-        log("MODULE INITIALIZED: max release time: " + String(maxReleaseSeconds / 3600) + " hours.");
+        log("MODULE INITIALIZED: cutdown will release in " + String(maxReleaseSeconds) + " seconds");
     }
 }
 
