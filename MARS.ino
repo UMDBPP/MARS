@@ -1,210 +1,163 @@
 #include <Wire.h>
 #include <XBee.h>
-#include <ccsds_xbee.h>
+#include "ccsds_xbee.h"
 
-/* physical definitions */
 #define ACTUATOR_PIN 2
-#define ARMED_LED_PIN 13
-#define XBEE_ADDR 03
-#define LINK_XBEE_ADDR 02
+#define XBEE_ADDRESS 05
+#define LINK_XBEE_ADDRESS 02
 #define XBEE_PAN_ID 0x0B0B
+#define CYCLE_DELAY 100 // time between execution cycles [ms]
 
 /* function codes */
-#define ARM_FCNCODE 0x0A
-#define ARM_STATUS_FCNCODE 0x01
-#define DISARM_FCNCODE 0x0D
-#define FIRE_FCNCODE 0x0F
-
-/* APIDs */
-#define SCORCH_STATUS_MSG_APID 10
-#define SCORCH_CMD_MSG_APID 15 // not used yet
+#define RETRACT_COMMAND 0xF1
+#define EXTEND_COMMAND 0xF2
+#define STATUS_REQUEST 0x0E
 
 /* behavioral constants */
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
-#define ARM_TIMEOUT (60000/CYCLE_DELAY) // 60 * 1000 / CYCLE_DELAY
 
 /* response definitions */
 #define INIT_RESPONSE 0xAC
 #define READ_FAIL_RESPONSE 0xAF
 #define BAD_COMMAND_RESPONSE 0xBB
-#define ARMED_RESPONSE 0xAA
-#define DISARMED_RESPONSE 0xDD
-#define FIRED_RESPONSE 0xFF
+#define RETRACT_RESPONSE 0xE1
+#define EXTEND_RESPONSE 0xE2
 
-/* function prototypes */
-void fire(int direction, int pulse_seconds);
-void read_input();
-void command_response(uint8_t *fcn_code);
-void arm_system();
-void disarm_system();
-void one_byte_message(uint8_t msg);
+// APIDs
+#define COMMAND_RESPONSE_APID 500 // not used yet
+#define STATUS_RESPONSE_APID 510
 
-/*** program begin ***/
+bool extended = false;
 
-/* program variables */
-boolean armed;    // flag indicating if system is armed
-int armed_ctr;    // counter tracking number of cycles system has been armed
-
-/* program functions */
 void setup()
 {
     Serial.begin(9600);
 
-    if (!InitXBee(XBEE_ADDR, XBEE_PAN_ID, Serial))
+    if (!InitXBee(XBEE_ADDRESS, XBEE_PAN_ID, Serial))
     {
         // it initialized
+        sendCommandResponse(INIT_RESPONSE);
     }
     else
     {
         // you're fucked
     }
 
-    // disarm the system before we enable the pins
-    delay(500);
-    disarm_system();    // also sets armed to false and armed_ctr to -1
-
-    pinMode(ARMED_LED_PIN, OUTPUT);
     pinMode(ACTUATOR_PIN, OUTPUT);
-
-    arm_system();
-
-    delay(1000);
-
-    // retract
-    fire(1, 6);
-
-    delay(2000);
-
-    // extend to lock in string
-    fire(2, 6);
-
-    one_byte_message(INIT_RESPONSE);
 }
 
 void loop()
 {
     // look for any new messages
-    read_input();
-    // if system is armed, increment the timer indicating for how long
-    if (armed_ctr > 0)
-    {
-        armed_ctr++;
-    }
-    // if the system has been armed for more than the timeout, disarm
-    if (armed_ctr > ARM_TIMEOUT)
-    {
-        disarm_system();
-    }
-    // wait
+    executeIncomingCommands();
     delay(CYCLE_DELAY);
 }
 
-void read_input()
+void executeIncomingCommands()
 {
     int pkt_type;
     int bytes_read;
-    uint8_t fcn_code;
+    uint8_t command_byte;
     uint8_t incoming_bytes[100];
 
     if ((pkt_type = readMsg(1)) == 0)
     {
         // Read something else, try again
     }
+
     // if we didn't have a read error, process it
     if (pkt_type > -1)
     {
         if (pkt_type)
         {
-            bytes_read = readCmdMsg(incoming_bytes, fcn_code);
-            command_response(&fcn_code);
+            delay(20000);
+            bytes_read = readCmdMsg(incoming_bytes, command_byte);
+            if (command_byte == EXTEND_COMMAND)
+            {
+                extend(6);
+            }
+            else if (command_byte == RETRACT_COMMAND)
+            {
+                retract(15);
+            }
+            else if (command_byte == STATUS_REQUEST)
+            {
+                if (extended)
+                {
+                    sendStatusResponse(EXTEND_COMMAND);
+                }
+                else
+                {
+                    sendStatusResponse(RETRACT_COMMAND);
+                }
+            }
+            else
+            {
+                sendCommandResponse(BAD_COMMAND_RESPONSE);
+            }
         }
         else
-        {    // unknown packet type?
-            one_byte_message(READ_FAIL_RESPONSE);
+        {
+            // unknown packet type?
+            sendStatusResponse(READ_FAIL_RESPONSE);
         }
     }
 }
 
-void command_response(uint8_t *fcncode)
+void sendCommandResponse(uint8_t msg)
 {
-    // process a command to arm the system
-    if (*fcncode == ARM_FCNCODE)
+    uint8_t tlm_data;
+    addIntToTlm<uint8_t>(msg, &tlm_data, (uint16_t) 0);
+    sendTlmMsg(LINK_XBEE_ADDRESS, COMMAND_RESPONSE_APID, &tlm_data, (uint16_t) 1);
+}
+
+void sendStatusResponse(uint8_t msg)
+{
+    uint8_t tlm_data;
+    addIntToTlm<uint8_t>(msg, &tlm_data, (uint16_t) 0);
+    sendTlmMsg(LINK_XBEE_ADDRESS, STATUS_RESPONSE_APID, &tlm_data, (uint16_t) 1);
+}
+
+void extend(int pulse_seconds)
+{
+    controlActuator("extend", pulse_seconds, EXTEND_RESPONSE);
+    extended = true;
+}
+
+void retract(int pulse_seconds)
+{
+    controlActuator("retract", pulse_seconds, RETRACT_RESPONSE);
+    extended = false;
+}
+
+void controlActuator(String direction, int pulse_seconds, uint8_t message)
+{
+    // actuator with built-in polarity switch
+    int frequency = 0;
+    if (direction == "retract")
     {
-        arm_system();
+        frequency = 1;
     }
-    // process a command to disarm the system
-    else if (*fcncode == DISARM_FCNCODE)
+    else if (direction == "extend")
     {
-        disarm_system();
-    }
-    // process a command to FIIIIRRRRREEEEEE!
-    else if (*fcncode == FIRE_FCNCODE)
-    {
-        // fire
-        if (armed)
-        {
-            fire(1, 30);
-        }
-    }
-    // process a command to report the arm status
-    else if (*fcncode == ARM_STATUS_FCNCODE)
-    {
-        if (armed)
-        {
-            one_byte_message(ARMED_RESPONSE);
-        }
-        else
-        {
-            one_byte_message(DISARMED_RESPONSE);
-        }
+        frequency = 2;
     }
     else
     {
-        one_byte_message(BAD_COMMAND_RESPONSE);
+        sendCommandResponse(BAD_COMMAND_RESPONSE);
+        return;
     }
-}
 
-void arm_system()
-{
-    armed = true;
-    digitalWrite(ARMED_LED_PIN, HIGH);
-    armed_ctr = 1;
-
-    one_byte_message(ARMED_RESPONSE);
-}
-
-void disarm_system()
-{
-    armed = false;
-    digitalWrite(ARMED_LED_PIN, LOW);
-    armed_ctr = -1;
-
-    one_byte_message(DISARMED_RESPONSE);
-}
-
-/*
- * direction is an int, 1 = retract 2 = extend
- */
-void fire(int direction, int pulse_seconds)
-{
-    one_byte_message(FIRED_RESPONSE);
-
+    // send signal: 1 ms retract, 2 ms extend
     unsigned long start_milliseconds = millis();
     while (millis() <= start_milliseconds + (pulse_seconds * 1000))
     {
         digitalWrite(ACTUATOR_PIN, HIGH);
-        delay(direction);
+        delay(frequency);
         digitalWrite(ACTUATOR_PIN, LOW);
-        delay(direction);
+        delay(frequency);
     }
-
     delay(500);
-    disarm_system();
-}
 
-void one_byte_message(uint8_t msg)
-{
-    uint8_t tlm_data;
-    addIntToTlm<uint8_t>(msg, &tlm_data, (uint16_t) 0);
-    sendTlmMsg(LINK_XBEE_ADDR, SCORCH_STATUS_MSG_APID, &tlm_data, (uint16_t) 1);
+    sendCommandResponse(message);
 }
