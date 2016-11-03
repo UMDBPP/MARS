@@ -9,9 +9,9 @@
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 
 /* function codes */
-#define RETRACT_FCNCODE 0xF1
-#define EXTEND_FCNCODE 0xF2
-#define STATUS_FCNCODE 0x0E
+#define RETRACT_COMMAND 0xF1
+#define EXTEND_COMMAND 0xF2
+#define STATUS_REQUEST 0x0E
 
 /* behavioral constants */
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
@@ -57,7 +57,7 @@ void executeIncomingCommands()
 {
     int pkt_type;
     int bytes_read;
-    uint8_t fcn_code;
+    uint8_t command_byte;
     uint8_t incoming_bytes[100];
 
     if ((pkt_type = readMsg(1)) == 0)
@@ -71,24 +71,24 @@ void executeIncomingCommands()
         if (pkt_type)
         {
             delay(20000);
-            bytes_read = readCmdMsg(incoming_bytes, fcn_code);
-            if (fcn_code == EXTEND_FCNCODE)
+            bytes_read = readCmdMsg(incoming_bytes, command_byte);
+            if (command_byte == EXTEND_COMMAND)
             {
                 extend(6);
             }
-            else if (fcn_code == RETRACT_FCNCODE)
+            else if (command_byte == RETRACT_COMMAND)
             {
                 retract(15);
             }
-            else if (fcn_code == STATUS_FCNCODE)
+            else if (command_byte == STATUS_REQUEST)
             {
                 if (extended)
                 {
-                    sendStatusResponse(EXTEND_FCNCODE);
+                    sendStatusResponse(EXTEND_COMMAND);
                 }
                 else
                 {
-                    sendStatusResponse(RETRACT_FCNCODE);
+                    sendStatusResponse(RETRACT_COMMAND);
                 }
             }
             else

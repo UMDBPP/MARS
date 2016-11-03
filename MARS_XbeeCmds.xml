@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<data>
+	<loop>false</loop>
+	<repeat_times>1</repeat_times>
+	<repeat_period>500</repeat_period>
+	<frames_list>
+		<frame name="EXTEND_COMMAND">
+			<payload>7E0013000100000000000000030018000000000000F2D6</payload>
+		</frame>
+		<frame name="RETRACT_COMMAND">
+			<payload>7E0013000100000000000000030018000000000000F1D4</payload>
+		</frame>
+		<frame name="STATUS_COMMAND">
+			<payload>7E00130001000000000000000300180000000000000EE2</payload>
+		</frame>
+	</frames_list>
+</data>
