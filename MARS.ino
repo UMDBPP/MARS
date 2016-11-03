@@ -11,7 +11,7 @@
 /* function codes */
 #define RETRACT_COMMAND 0xF1
 #define EXTEND_COMMAND 0xF2
-#define STATUS_REQUEST 0x0E
+#define EXTEND_STATUS_REQUEST 0x0E
 
 /* behavioral constants */
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
@@ -80,15 +80,15 @@ void executeIncomingCommands()
             {
                 retract(15);
             }
-            else if (command_byte == STATUS_REQUEST)
+            else if (command_byte == EXTEND_STATUS_REQUEST)
             {
                 if (extended)
                 {
-                    sendStatusResponse(EXTEND_COMMAND);
+                    sendStatusResponse(EXTEND_RESPONSE);
                 }
                 else
                 {
-                    sendStatusResponse(RETRACT_COMMAND);
+                    sendStatusResponse(RETRACT_RESPONSE);
                 }
             }
             else
@@ -108,14 +108,16 @@ void sendCommandResponse(uint8_t msg)
 {
     uint8_t tlm_data;
     addIntToTlm<uint8_t>(msg, &tlm_data, (uint16_t) 0);
-    sendTlmMsg(LINK_XBEE_ADDRESS, COMMAND_RESPONSE_APID, &tlm_data, (uint16_t) 1);
+    sendTlmMsg(LINK_XBEE_ADDRESS, COMMAND_RESPONSE_APID, &tlm_data,
+            (uint16_t) 1);
 }
 
 void sendStatusResponse(uint8_t msg)
 {
     uint8_t tlm_data;
     addIntToTlm<uint8_t>(msg, &tlm_data, (uint16_t) 0);
-    sendTlmMsg(LINK_XBEE_ADDRESS, STATUS_RESPONSE_APID, &tlm_data, (uint16_t) 1);
+    sendTlmMsg(LINK_XBEE_ADDRESS, STATUS_RESPONSE_APID, &tlm_data,
+            (uint16_t) 1);
 }
 
 void extend(int pulse_seconds)
