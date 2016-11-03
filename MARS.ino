@@ -3,8 +3,8 @@
 #include "ccsds_xbee.h"
 
 #define ACTUATOR_PIN 2
-#define XBEE_ADDR 05
-#define LINK_XBEE_ADDR 02
+#define XBEE_ADDRESS 05
+#define LINK_XBEE_ADDRESS 02
 #define XBEE_PAN_ID 0x0B0B
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 
@@ -24,8 +24,8 @@
 #define EXTEND_RESPONSE 0xE2
 
 // APIDs
-#define CMD_MSG_APID 500 // not used yet
-#define STATUS_MSG_APID 510
+#define COMMAND_RESPONSE_APID 500 // not used yet
+#define STATUS_RESPONSE_APID 510
 
 bool extended = false;
 
@@ -33,7 +33,7 @@ void setup()
 {
     Serial.begin(9600);
 
-    if (!InitXBee(XBEE_ADDR, XBEE_PAN_ID, Serial))
+    if (!InitXBee(XBEE_ADDRESS, XBEE_PAN_ID, Serial))
     {
         // it initialized
         sendCommandResponse(INIT_RESPONSE);
@@ -108,14 +108,14 @@ void sendCommandResponse(uint8_t msg)
 {
     uint8_t tlm_data;
     addIntToTlm<uint8_t>(msg, &tlm_data, (uint16_t) 0);
-    sendTlmMsg(LINK_XBEE_ADDR, CMD_MSG_APID, &tlm_data, (uint16_t) 1);
+    sendTlmMsg(LINK_XBEE_ADDRESS, COMMAND_RESPONSE_APID, &tlm_data, (uint16_t) 1);
 }
 
 void sendStatusResponse(uint8_t msg)
 {
     uint8_t tlm_data;
     addIntToTlm<uint8_t>(msg, &tlm_data, (uint16_t) 0);
-    sendTlmMsg(LINK_XBEE_ADDR, STATUS_MSG_APID, &tlm_data, (uint16_t) 1);
+    sendTlmMsg(LINK_XBEE_ADDRESS, STATUS_RESPONSE_APID, &tlm_data, (uint16_t) 1);
 }
 
 void extend(int pulse_seconds)
