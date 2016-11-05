@@ -553,9 +553,13 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
             case COMMAND_EXTEND_ACTUATOR:
                 debug_serial.println("Received extend actuator command");
 
-                extend(6);
+                // create a pkt
+                pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
 
-                sendSingleByteMessage(EXTEND_RESPONSE);
+                // send the HK packet via xbee and log it
+                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
+
+                extend(6);
 
                 // increment the cmd executed counter
                 CmdExeCtr++;
@@ -563,9 +567,13 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
             case COMMAND_RETRACT_ACTUATOR:
                 debug_serial.println("Received retract actuator command");
 
-                retract(16);
+                // create a pkt
+                pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
 
-                sendSingleByteMessage(RETRACT_RESPONSE);
+                // send the HK packet via xbee and log it
+                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
+
+                retract(16);
 
                 // increment the cmd executed counter
                 CmdExeCtr++;
@@ -576,8 +584,8 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
 
-                // create a HK pkt
-                pktLength = create_IMU_pkt(Pkt_Buff, IMUData);
+                // create a pkt
+                pktLength = create_Status_pkt(Pkt_Buff, (extended) ? EXTEND_RESPONSE : RETRACT_RESPONSE);
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
@@ -1032,11 +1040,6 @@ void controlActuator(String direction, int pulse_seconds)
     {
         frequency = 2;
     }
-    else
-    {
-        sendSingleByteMessage(BAD_COMMAND_RESPONSE);
-        return;
-    }
 
     // send signal: 1 ms retract, 2 ms extend
     unsigned long start_milliseconds = millis();
@@ -1051,9 +1054,44 @@ void controlActuator(String direction, int pulse_seconds)
     delay(500);
 }
 
-void sendSingleByteMessage(uint8_t message)
+uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
 {
-    uint8_t tlm_data;
-    addIntToTlm<uint8_t>(message, &tlm_data, (uint16_t) 0);
-    sendTlmMsg(LINK_XBEE_ADDRESS, STATUS_APID, &tlm_data, (uint16_t) 1);
+    /*  create_IMU_pkt()
+     *
+     *  Creates an HK packet containing the values of all the interface counters.
+     *  Packet data is filled into the memory passed in as the argument
+     *
+     */
+    // get the current time from the RTC
+    DateTime now = rtc.now();
+
+    // initalize counter to record length of packet
+    uint16_t payloadSize = 0;
+
+    // add length of primary header
+    payloadSize += sizeof(CCSDS_PriHdr_t);
+
+    // Populate primary header fields:
+    setAPID(HK_Pkt_Buff, STATUS_APID);
+    setSecHdrFlg(HK_Pkt_Buff, 1);
+    setPacketType(HK_Pkt_Buff, 0);
+    setVer(HK_Pkt_Buff, 0);
+    setSeqCtr(HK_Pkt_Buff, 0);
+    setSeqFlg(HK_Pkt_Buff, 0);
+
+    // add length of secondary header
+    payloadSize += sizeof(CCSDS_TlmSecHdr_t);
+
+    // Populate the secondary header fields:
+    setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
+    setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
+
+    // Add counter values to the pkt
+    payloadSize = addIntToTlm(message, HK_Pkt_Buff, payloadSize);
+
+    // fill the length field
+    setPacketLength(HK_Pkt_Buff, payloadSize);
+
+    return payloadSize;
+
 }
