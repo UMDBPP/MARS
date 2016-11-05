@@ -321,18 +321,18 @@ void setup(void)
     File PWRLogFile = SD.open("PWR_LOG.txt", FILE_WRITE);
     File ENVLogFile = SD.open("ENV_LOG.txt", FILE_WRITE);
 
+#ifdef mars_1
+    pinMode(ACTUATOR_CONTROL_PIN, OUTPUT);
+
+    digitalWrite(ACTUATOR_CONTROL_PIN, LOW);
+#endif
+
 #ifdef mars_2
     pinMode(ACTUATOR_PIN_VCC, OUTPUT);
     pinMode(ACTUATOR_PIN_GND, OUTPUT);
 
     digitalWrite(ACTUATOR_PIN_VCC, LOW);
     digitalWrite(ACTUATOR_PIN_GND, LOW);
-#endif
-
-#ifdef mars_1
-    pinMode(ACTUATOR_CONTROL_PIN, OUTPUT);
-
-    digitalWrite(ACTUATOR_CONTROL_PIN, LOW);
 #endif
 }
 
