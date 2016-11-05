@@ -23,8 +23,8 @@
 #endif
 
 #ifdef mars_2
-#define ACTUATOR_PIN_VCC 1
-#define ACTUATOR_PIN_GND 3
+#define ACTUATOR_PIN_HBRIDGE_A 1
+#define ACTUATOR_PIN_HBRIDGE_B 3
 #endif
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
@@ -328,11 +328,11 @@ void setup(void)
 #endif
 
 #ifdef mars_2
-    pinMode(ACTUATOR_PIN_VCC, OUTPUT);
-    pinMode(ACTUATOR_PIN_GND, OUTPUT);
+    pinMode(ACTUATOR_PIN_HBRIDGE_A, OUTPUT);
+    pinMode(ACTUATOR_PIN_HBRIDGE_B, OUTPUT);
 
-    digitalWrite(ACTUATOR_PIN_VCC, LOW);
-    digitalWrite(ACTUATOR_PIN_GND, LOW);
+    digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
+    digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 #endif
 }
 
@@ -1048,26 +1048,26 @@ void print_time(File file)
 
 void extend(int pulse_seconds)
 {
-    controlActuator("extend", pulse_seconds);
+    controlActuator(-1, pulse_seconds);
     extended = true;
 }
 
 void retract(int pulse_seconds)
 {
-    controlActuator("retract", pulse_seconds);
+    controlActuator(1, pulse_seconds);
     extended = false;
 }
 
-void controlActuator(String direction, int pulse_seconds)
+void controlActuator(int direction, int pulse_seconds)
 {
 #ifdef mars_1
     // actuator with built-in polarity switch
     int frequency = 0;
-    if (direction == "retract")
+    if (direction < 0)
     {
         frequency = 1;
     }
-    else if (direction == "extend")
+    else if (direction > 0)
     {
         frequency = 2;
     }
@@ -1082,28 +1082,25 @@ void controlActuator(String direction, int pulse_seconds)
         digitalWrite(ACTUATOR_CONTROL_PIN, LOW);
         delay(frequency);
     }
-
-    delay(500);
-
 #endif
 
 #ifdef mars_2
     // actuator without built-in polarity switch
-    if (direction == "retract")
+    if (direction < 0)
     {
-        digitalWrite(ACTUATOR_PIN_VCC, LOW);
-        digitalWrite(ACTUATOR_PIN_GND, HIGH);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, HIGH);
     }
-    else if (direction == "extend")
+    else if (direction > 0)
     {
-        digitalWrite(ACTUATOR_PIN_GND, LOW);
-        digitalWrite(ACTUATOR_PIN_VCC, HIGH);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, HIGH);
     }
 
     delay(pulse_seconds * 1000);
 
-    digitalWrite(ACTUATOR_PIN_VCC, LOW);
-    digitalWrite(ACTUATOR_PIN_GND, LOW);
+    digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
+    digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 
 #endif
 }
