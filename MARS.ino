@@ -14,10 +14,19 @@
 #include "CCSDS_Xbee/ccsds_util.h"
 #include <SSC.h>
 
+#define mars_1
+
 // Program Specific Constants
-#define ACTUATOR_PIN 2
+
+#ifdef mars_1
+#define ACTUATOR_CONTROL_PIN 2
+#endif
+
+#ifdef mars_2
 #define ACTUATOR_PIN_VCC 1
 #define ACTUATOR_PIN_GND 3
+#endif
+
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 bool extended = false;
 
@@ -312,13 +321,19 @@ void setup(void)
     File PWRLogFile = SD.open("PWR_LOG.txt", FILE_WRITE);
     File ENVLogFile = SD.open("ENV_LOG.txt", FILE_WRITE);
 
+#ifdef mars_2
     pinMode(ACTUATOR_PIN_VCC, OUTPUT);
     pinMode(ACTUATOR_PIN_GND, OUTPUT);
-    pinMode(ACTUATOR_PIN, OUTPUT);
 
     digitalWrite(ACTUATOR_PIN_VCC, LOW);
     digitalWrite(ACTUATOR_PIN_GND, LOW);
-    digitalWrite(ACTUATOR_PIN, LOW);
+#endif
+
+#ifdef mars_1
+    pinMode(ACTUATOR_CONTROL_PIN, OUTPUT);
+
+    digitalWrite(ACTUATOR_CONTROL_PIN, LOW);
+#endif
 }
 
 void loop(void)
@@ -564,7 +579,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
-                
+
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
 
@@ -581,14 +596,14 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
-                
+
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
 
-                retract(16);
+                retract(6);
 
                 // increment the cmd executed counter
                 CmdExeCtr++;
@@ -1045,6 +1060,7 @@ void retract(int pulse_seconds)
 
 void controlActuator(String direction, int pulse_seconds)
 {
+#ifdef mars_1
     // actuator with built-in polarity switch
     int frequency = 0;
     if (direction == "retract")
@@ -1061,30 +1077,35 @@ void controlActuator(String direction, int pulse_seconds)
     // send signal: 1 ms retract, 2 ms extend
     while (millis() <= start_milliseconds + (pulse_seconds * 1000))
     {
-        digitalWrite(ACTUATOR_PIN, HIGH);
+        digitalWrite(ACTUATOR_CONTROL_PIN, HIGH);
         delay(frequency);
-        digitalWrite(ACTUATOR_PIN, LOW);
+        digitalWrite(ACTUATOR_CONTROL_PIN, LOW);
         delay(frequency);
     }
 
     delay(500);
 
+#endif
+
+#ifdef mars_2
     // actuator without built-in polarity switch
-/*    if (direction == "reatract")
+    if (direction == "retract")
     {
-      digitalWrite(ACTUATOR_PIN_VCC, LOW);
-      digitalWrite(ACTUATOR_PIN_GND, HIGH);
+        digitalWrite(ACTUATOR_PIN_VCC, LOW);
+        digitalWrite(ACTUATOR_PIN_GND, HIGH);
     }
     else if (direction == "extend")
     {
-      digitalWrite(ACTUATOR_PIN_GND, LOW);
-      digitalWrite(ACTUATOR_PIN_VCC, HIGH);
+        digitalWrite(ACTUATOR_PIN_GND, LOW);
+        digitalWrite(ACTUATOR_PIN_VCC, HIGH);
     }
 
-    delay(pulse_seconds);
+    delay(pulse_seconds * 1000);
 
     digitalWrite(ACTUATOR_PIN_VCC, LOW);
-    digitalWrite(ACTUATOR_PIN_GND, LOW);*/
+    digitalWrite(ACTUATOR_PIN_GND, LOW);
+
+#endif
 }
 
 uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
