@@ -15,7 +15,7 @@
 #include <SSC.h>
 
 // Program Specific Constants
-//#define ACTUATOR_PIN 2
+#define ACTUATOR_PIN 2
 #define ACTUATOR_PIN_VCC 1
 #define ACTUATOR_PIN_GND 3
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
