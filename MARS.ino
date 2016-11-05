@@ -539,7 +539,6 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 // Reboot
             case COMMAND_REBOOT:
                 // Requests that Link reboot
-
                 debug_serial.println("Received Reboot Cmd");
 
                 // set the reboot timer
@@ -553,6 +552,9 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
             case COMMAND_EXTEND_ACTUATOR:
                 debug_serial.println("Received extend actuator command");
 
+                // extract the desintation address from the command
+                extractFromTlm(destAddr, data, 8);
+                
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
 
@@ -567,6 +569,9 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
             case COMMAND_RETRACT_ACTUATOR:
                 debug_serial.println("Received retract actuator command");
 
+                // extract the desintation address from the command
+                extractFromTlm(destAddr, data, 8);
+                
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
 
