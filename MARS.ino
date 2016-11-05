@@ -23,8 +23,8 @@
 #endif
 
 #ifdef mars_2
-#define ACTUATOR_PIN_HBRIDGE_A 1
-#define ACTUATOR_PIN_HBRIDGE_B 3
+#define ACTUATOR_PIN_HBRIDGE_A 3
+#define ACTUATOR_PIN_HBRIDGE_B 4
 #endif
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
@@ -1088,13 +1088,13 @@ void controlActuator(int direction, int pulse_seconds)
     // actuator without built-in polarity switch
     if (direction < 0)
     {
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, HIGH);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, HIGH);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
     }
     else if (direction > 0)
     {
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, HIGH);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, HIGH);
     }
 
     delay(pulse_seconds * 1000);
