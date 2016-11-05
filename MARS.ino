@@ -1046,7 +1046,7 @@ void retract(int pulse_seconds)
 void controlActuator(String direction, int pulse_seconds)
 {
     // actuator with built-in polarity switch
-/*    int frequency = 0;
+    int frequency = 0;
     if (direction == "retract")
     {
         frequency = 1;
@@ -1067,10 +1067,10 @@ void controlActuator(String direction, int pulse_seconds)
         delay(frequency);
     }
 
-    delay(500);*/
+    delay(500);
 
     // actuator without built-in polarity switch
-    if (direction == "reatract")
+/*    if (direction == "reatract")
     {
       digitalWrite(ACTUATOR_PIN_VCC, LOW);
       digitalWrite(ACTUATOR_PIN_GND, HIGH);
@@ -1084,7 +1084,7 @@ void controlActuator(String direction, int pulse_seconds)
     delay(pulse_seconds);
 
     digitalWrite(ACTUATOR_PIN_VCC, LOW);
-    digitalWrite(ACTUATOR_PIN_GND, LOW);
+    digitalWrite(ACTUATOR_PIN_GND, LOW);*/
 }
 
 uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
