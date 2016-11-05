@@ -564,7 +564,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
-                
+
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
 
@@ -581,7 +581,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
-                
+
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
 
@@ -1070,7 +1070,7 @@ void controlActuator(String direction, int pulse_seconds)
     delay(500);*/
 
     // actuator without built-in polarity switch
-    if (direction == "reatract")
+    if (direction == "retract")
     {
       digitalWrite(ACTUATOR_PIN_VCC, LOW);
       digitalWrite(ACTUATOR_PIN_GND, HIGH);
@@ -1081,7 +1081,7 @@ void controlActuator(String direction, int pulse_seconds)
       digitalWrite(ACTUATOR_PIN_VCC, HIGH);
     }
 
-    delay(pulse_seconds);
+    delay(pulse_seconds * 1000);
 
     digitalWrite(ACTUATOR_PIN_VCC, LOW);
     digitalWrite(ACTUATOR_PIN_GND, LOW);
