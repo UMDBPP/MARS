@@ -15,7 +15,9 @@
 #include <SSC.h>
 
 // Program Specific Constants
-#define ACTUATOR_PIN 2
+//#define ACTUATOR_PIN 2
+#define ACTUATOR_PIN_VCC 1
+#define ACTUATOR_PIN_GND 3
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 bool extended = false;
 
@@ -309,6 +311,14 @@ void setup(void)
     File IMULogFile = SD.open("IMU_LOG.txt", FILE_WRITE);
     File PWRLogFile = SD.open("PWR_LOG.txt", FILE_WRITE);
     File ENVLogFile = SD.open("ENV_LOG.txt", FILE_WRITE);
+
+    pinMode(ACTUATOR_PIN_VCC, OUTPUT);
+    pinMode(ACTUATOR_PIN_GND, OUTPUT);
+    pinMode(ACTUATOR_PIN, OUTPUT);
+
+    digitalWrite(ACTUATOR_PIN_VCC, LOW);
+    digitalWrite(ACTUATOR_PIN_GND, LOW);
+    digitalWrite(ACTUATOR_PIN, LOW);
 }
 
 void loop(void)
@@ -1036,7 +1046,7 @@ void retract(int pulse_seconds)
 void controlActuator(String direction, int pulse_seconds)
 {
     // actuator with built-in polarity switch
-    int frequency = 0;
+/*    int frequency = 0;
     if (direction == "retract")
     {
         frequency = 1;
@@ -1046,8 +1056,9 @@ void controlActuator(String direction, int pulse_seconds)
         frequency = 2;
     }
 
-    // send signal: 1 ms retract, 2 ms extend
     unsigned long start_milliseconds = millis();
+
+    // send signal: 1 ms retract, 2 ms extend
     while (millis() <= start_milliseconds + (pulse_seconds * 1000))
     {
         digitalWrite(ACTUATOR_PIN, HIGH);
@@ -1056,7 +1067,24 @@ void controlActuator(String direction, int pulse_seconds)
         delay(frequency);
     }
 
-    delay(500);
+    delay(500);*/
+
+    // actuator without built-in polarity switch
+    if (direction == "reatract")
+    {
+      digitalWrite(ACTUATOR_PIN_VCC, LOW);
+      digitalWrite(ACTUATOR_PIN_GND, HIGH);
+    }
+    else if (direction == "extend")
+    {
+      digitalWrite(ACTUATOR_PIN_GND, LOW);
+      digitalWrite(ACTUATOR_PIN_VCC, HIGH);
+    }
+
+    delay(pulse_seconds);
+
+    digitalWrite(ACTUATOR_PIN_VCC, LOW);
+    digitalWrite(ACTUATOR_PIN_GND, LOW);
 }
 
 uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
