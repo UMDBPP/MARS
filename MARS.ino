@@ -1101,13 +1101,13 @@ void controlActuator(int direction, int pulse_seconds)
     // actuator without built-in polarity switch
     if (direction < 0)
     {
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, HIGH);
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, HIGH);
     }
     else if (direction > 0)
     {
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
-        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, HIGH);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_A, HIGH);
+        digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
     }
 
     delay(pulse_seconds * 1000);
