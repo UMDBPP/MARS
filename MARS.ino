@@ -20,11 +20,35 @@
 
 #ifdef mars_1
 #define ACTUATOR_CONTROL_PIN 2
+
+/* APIDs */
+#define COMMAND_APID 400
+#define STATUS_APID 401
+#define PACKET_COUNTER_APID 410
+#define ENVIRONMENTAL_PACKET_APID 420
+#define POWER_PACKET_APID 430
+#define IMU_PACKET_APID 440
+
+//// Xbee setup parameters
+#define XBEE_ADDR 0x0004 // XBee address for this payload
+// DO NOT CHANGE without making corresponding change in ground system definitions
 #endif
 
 #ifdef mars_2
 #define ACTUATOR_PIN_HBRIDGE_A 3
 #define ACTUATOR_PIN_HBRIDGE_B 4
+
+/* APIDs */
+#define COMMAND_APID 500
+#define STATUS_APID 501
+#define PACKET_COUNTER_APID 510
+#define ENVIRONMENTAL_PACKET_APID 520
+#define POWER_PACKET_APID 530
+#define IMU_PACKET_APID 540
+
+//// Xbee setup parameters
+#define XBEE_ADDR 0x0005 // XBee address for this payload
+// DO NOT CHANGE without making corresponding change in ground system definitions
 #endif
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
@@ -34,14 +58,6 @@ bool extended = false;
 // logging flag
 #define LOG_RCVD 1
 #define LOG_SEND 0
-
-/* APIDs */
-#define COMMAND_APID 400 // not used yet
-#define STATUS_APID 401
-#define PACKET_COUNTER_APID 410
-#define ENVIRONMENTAL_PACKET_APID 420
-#define POWER_PACKET_APID 430
-#define IMU_PACKET_APID 440
 
 /* function codes */
 #define COMMAND_RETRACT_ACTUATOR 01
@@ -64,9 +80,6 @@ bool extended = false;
 #define REQUEST_IMU_DATA 40
 #define COMMAND_REBOOT 99
 
-//// Xbee setup parameters
-#define XBEE_ADDR 0x0004 // XBee address for this payload
-// DO NOT CHANGE without making corresponding change in ground system definitions
 #define PAN_ID 0x0B0B // XBee PAN address (must be the same for all xbees)
 // DO NOT CHANGE without changing for all xbees
 #define LINK_XBEE_ADDRESS 0x0002
