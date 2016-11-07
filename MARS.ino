@@ -4,14 +4,14 @@
 #include <Adafruit_Sensor.h>
 #include <Adafruit_BNO055.h>
 #include <utility/imumaths.h>
-#include "Adafruit_MCP9808.h"
-#include "RTClib.h" // RTC and SoftRTC
+#include <Adafruit_MCP9808.h>
+#include <RTClib.h> // RTC and SoftRTC
 #include <Adafruit_BME280.h>
 #include <SD.h>
 #include <Adafruit_ADS1015.h>
-#include "CCSDS_Xbee/CCSDS.h"
-#include "CCSDS_Xbee/ccsds_xbee.h"
-#include "CCSDS_Xbee/ccsds_util.h"
+#include <CCSDS.h>
+#include <ccsds_xbee.h>
+#include <ccsds_util.h>
 #include <SSC.h>
 
 #define mars_1
@@ -19,7 +19,12 @@
 // Program Specific Constants
 
 #ifdef mars_1
+
 #define ACTUATOR_CONTROL_PIN 2
+
+//// Xbee setup parameters
+#define XBEE_ADDR 0x0004 // XBee address for this payload
+// DO NOT CHANGE without making corresponding change in ground system definitions
 
 /* APIDs */
 #define COMMAND_APID 400
@@ -29,14 +34,16 @@
 #define POWER_PACKET_APID 430
 #define IMU_PACKET_APID 440
 
-//// Xbee setup parameters
-#define XBEE_ADDR 0x0004 // XBee address for this payload
-// DO NOT CHANGE without making corresponding change in ground system definitions
 #endif
 
 #ifdef mars_2
+
 #define ACTUATOR_PIN_HBRIDGE_A 3
 #define ACTUATOR_PIN_HBRIDGE_B 4
+
+//// Xbee setup parameters
+#define XBEE_ADDR 0x0005 // XBee address for this payload
+// DO NOT CHANGE without making corresponding change in ground system definitions
 
 /* APIDs */
 #define COMMAND_APID 500
@@ -46,9 +53,6 @@
 #define POWER_PACKET_APID 530
 #define IMU_PACKET_APID 540
 
-//// Xbee setup parameters
-#define XBEE_ADDR 0x0005 // XBee address for this payload
-// DO NOT CHANGE without making corresponding change in ground system definitions
 #endif
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
@@ -175,6 +179,7 @@ uint16_t create_HK_pkt(uint8_t HK_Pkt_Buff[]);
 uint16_t create_IMU_pkt(uint8_t HK_Pkt_Buff[], struct IMUData_s IMUData);
 uint16_t create_PWR_pkt(uint8_t HK_Pkt_Buff[], struct PWRData_s PWRData);
 uint16_t create_ENV_pkt(uint8_t HK_Pkt_Buff[], struct ENVData_s ENVData);
+uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message);
 
 // sensor reading
 void read_imu(struct IMUData_s *IMUData);
@@ -347,6 +352,8 @@ void setup(void)
     digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
     digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 #endif
+
+    retract(6);
 }
 
 void loop(void)
@@ -1061,13 +1068,13 @@ void print_time(File file)
 
 void extend(int pulse_seconds)
 {
-    controlActuator(-1, pulse_seconds);
+    controlActuator(1, pulse_seconds);
     extended = true;
 }
 
 void retract(int pulse_seconds)
 {
-    controlActuator(1, pulse_seconds);
+    controlActuator(-1, pulse_seconds);
     extended = false;
 }
 
