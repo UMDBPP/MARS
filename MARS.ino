@@ -18,6 +18,8 @@
 
 // Program Specific Constants
 
+#define timer 2100 // time in seconds before actuator will retract, regardless of commands sent
+
 #ifdef mars_1
 
 #define ACTUATOR_CONTROL_PIN 2
@@ -353,7 +355,7 @@ void setup(void)
     digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 #endif
 
-    retract(6);
+    retract(10);
 }
 
 void loop(void)
@@ -422,6 +424,14 @@ void loop(void)
         // respond to it
         command_response(ReadData, BytesRead, IMUData, ENVData, PWRData);
     }
+
+    // if time on exceeds timer set in program constants, then retract actuator
+#ifdef timer
+    if (millis() > (timer * 1000))
+    {
+        retract(10);
+    }
+#endif
 
     // wait a bit
     delay(10);
@@ -623,7 +633,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
 
-                retract(6);
+                retract(10);
 
                 // increment the cmd executed counter
                 CmdExeCtr++;
