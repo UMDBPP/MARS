@@ -18,9 +18,9 @@
 
 // Program Specific Constants
 
-#define timer 2100 // time in seconds before actuator will retract, regardless of commands sent
-
 #ifdef mars_1
+
+#define timer 360 // seconds after last keepalive when actuator will retract
 
 #define ACTUATOR_CONTROL_PIN 2
 
@@ -39,6 +39,8 @@
 #endif
 
 #ifdef mars_2
+
+#define timer 180 // seconds after last keepalive when actuator will retract
 
 #define ACTUATOR_PIN_HBRIDGE_A 3
 #define ACTUATOR_PIN_HBRIDGE_B 4
@@ -59,7 +61,7 @@
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 bool extended = false;
-bool kill = false;
+bool armed = true;
 
 //// Enumerations
 // logging flag
@@ -70,9 +72,9 @@ bool kill = false;
 #define COMMAND_RETRACT_ACTUATOR 01
 #define COMMAND_EXTEND_ACTUATOR 02
 #define REQUEST_ACTUATOR_STATUS 03
-#define COMMAND_DEAD_MAN 04
-#define COMMAND_KILL 05
-
+#define COMMAND_KEEPALIVE 04
+#define COMMAND_DISARM 05
+#define COMMAND_ARM 06
 
 /* response codes */
 #define INIT_RESPONSE 0xAC
@@ -80,8 +82,9 @@ bool kill = false;
 #define BAD_COMMAND_RESPONSE 0xBB
 #define RETRACT_RESPONSE 0xE1
 #define EXTEND_RESPONSE 0xE2
-#define KILL_RESPONSE 0xE3
-#define DEAD_MAN_RESPONSE 0xE4
+#define KEEPALIVE_RESPONSE 0xE4
+#define DISARM_RESPONSE 0xE5
+#define ARM_RESPONSE 0xE6
 
 // CAMERA FcnCodes
 #define COMMAND_NOOP 0
@@ -110,7 +113,6 @@ SSC ssc(0x28, 255);
 // so that the user doesn't have to keep track of which is which
 #define debug_serial Serial
 #define xbee_serial Serial3
-
 
 //// Data Structures
 // imu data
@@ -168,8 +170,7 @@ uint32_t XbeeSentByteCtr = 0;
 
 // other variables
 uint32_t start_millis = 0;
-uint32_t new_millis = 0;
-
+uint32_t last_keepalive_millis = 0;
 
 // logging files
 File xbeeLogFile;
@@ -364,13 +365,11 @@ void setup(void)
     digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 #endif
 
-<<<<<<< HEAD
-    retract(6);
+    retract(10);
     delay(6000);
     extend(6);
-=======
-    retract(10);
->>>>>>> origin/master
+
+    armed = true;
 }
 
 void loop(void)
@@ -381,26 +380,26 @@ void loop(void)
      *  Log sensors
      *  Reads from xbee and processes any data
      */
-     
-     if ((millis() - new_millis) >= 360000)
-     {
-      if (kill == false)
-      {
-         retract(12);
-      }
-     }
 
-    // declare structures to store data
+    if ((millis() - last_keepalive_millis) >= 360000)
+    {
+        if (armed == true)
+        {
+            retract(12);
+        }
+    }
+
+// declare structures to store data
     IMUData_s IMUData;
     PWRData_s PWRData;
     ENVData_s ENVData;
 
-    // increment read counters
+// increment read counters
     imu_read_ctr++;
     pwr_read_ctr++;
     env_read_ctr++;
 
-    // read sensors if time between last read
+// read sensors if time between last read
     if (imu_read_ctr > imu_read_lim)
     {
         read_imu(&IMUData);
@@ -420,25 +419,25 @@ void loop(void)
         env_read_ctr = 0;
     }
 
-    // initalize a counter to record how many bytes were read this iteration
+// initalize a counter to record how many bytes were read this iteration
     int BytesRead = 0;
 
-    //// Read message from xbee
+//// Read message from xbee
 
-    // xbee data arrives all at the same time, so its not necessary to remember
-    // it between iterations, so we use a local buffer
+// xbee data arrives all at the same time, so its not necessary to remember
+// it between iterations, so we use a local buffer
     uint8_t ReadData[100];
 
-    // read the data from the xbee with a 1ms timeout
+// read the data from the xbee with a 1ms timeout
     BytesRead = _readXbeeMsg(ReadData, 1);
 
-    // if data was read, record it in the Xbee Rcvd counter
+// if data was read, record it in the Xbee Rcvd counter
     if (BytesRead > 0)
     {
         XbeeRcvdByteCtr += BytesRead;
     }
 
-    // if data was read, process it as a CCSDS packet
+// if data was read, process it as a CCSDS packet
     if (BytesRead > 0)
     {
         // log the received data
@@ -448,7 +447,7 @@ void loop(void)
         command_response(ReadData, BytesRead, IMUData, ENVData, PWRData);
     }
 
-    // if time on exceeds timer set in program constants, then retract actuator
+// if time on exceeds timer set in program constants, then retract actuator
 #ifdef timer
     if (millis() > (timer * 1000))
     {
@@ -456,7 +455,7 @@ void loop(void)
     }
 #endif
 
-    // wait a bit
+// wait a bit
     delay(10);
 
 }
@@ -477,10 +476,10 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
     }
     debug_serial.println();
 
-    // get the APID (the field which identifies the type of packet)
+// get the APID (the field which identifies the type of packet)
     uint16_t _APID = getAPID(data);
 
-    // check if the data is a command packet with the Camera command APID
+// check if the data is a command packet with the Camera command APID
     if (getPacketType(data) && _APID == COMMAND_APID)
     {
 
@@ -627,35 +626,36 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 break;
 
                 // unrecognized fcn code
-                
-            case COMMAND_KILL:
-                debug_serial.println("KILL!!!!!");
+
+            case COMMAND_DISARM:
+                debug_serial.println("received disarm command");
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
 
                 // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff, KILL_RESPONSE);
+                pktLength = create_Status_pkt(Pkt_Buff, DISARM_RESPONSE);
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
 
-                kill = true;
+                armed = false;
                 break;
 
-            case COMMAND_DEAD_MAN:
-                debug_serial.println("Received extend actuator command");
+            case COMMAND_KEEPALIVE:
+                debug_serial.println("Received keepalive packet");
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
 
                 // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff, DEAD_MAN_RESPONSE);
+                pktLength = create_Status_pkt(Pkt_Buff, KEEPALIVE_RESPONSE);
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
 
-                new_millis = millis();
+                last_keepalive_millis = millis();
+                break;
             case COMMAND_EXTEND_ACTUATOR:
                 debug_serial.println("Received extend actuator command");
 
@@ -685,11 +685,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
 
-<<<<<<< HEAD
                 retract(15);
-=======
-                retract(10);
->>>>>>> origin/master
 
                 // increment the cmd executed counter
                 CmdExeCtr++;
@@ -729,10 +725,10 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
 void log_imu(struct IMUData_s IMUData, File IMULogFile)
 {
-    // print the time to the file
+// print the time to the file
     print_time(IMULogFile);
 
-    // print the sensor values
+// print the sensor values
     IMULogFile.print(", ");
     IMULogFile.print(IMUData.system_calibration);
     IMULogFile.print(", ");
@@ -765,10 +761,10 @@ void log_imu(struct IMUData_s IMUData, File IMULogFile)
 
 void log_env(struct ENVData_s ENVData, File ENVLogFile)
 {
-    // print the time to the file
+// print the time to the file
     print_time(ENVLogFile);
 
-    // print the sensor values
+// print the sensor values
     ENVLogFile.print(", ");
     ENVLogFile.print(ENVData.bme_pres);
     ENVLogFile.print(", ");
@@ -789,10 +785,10 @@ void log_env(struct ENVData_s ENVData, File ENVLogFile)
 
 void log_pwr(struct PWRData_s PWRData, File PWRLogFile)
 {
-    // print the time to the file
+// print the time to the file
     print_time(PWRLogFile);
 
-    // print the sensor values
+// print the sensor values
     PWRLogFile.print(", ");
     PWRLogFile.print(PWRData.batt_volt);
     PWRLogFile.print(", ");
@@ -803,21 +799,21 @@ void log_pwr(struct PWRData_s PWRData, File PWRLogFile)
 
 void read_env(struct ENVData_s *ENVData)
 {
-    //BME280
+//BME280
     ENVData->bme_pres = bme.readPressure() / 100.0F;    // hPa
     ENVData->bme_temp = bme.readTemperature();    // degC
     ENVData->bme_humid = bme.readHumidity();    // %
 
-    //  SSC
+//  SSC
     /*
      ssc.update();
      ENVData->ssc_pres = ssc.pressure(); // PSI
      ENVData->ssc_temp = ssc.temperature(); // degC
      */
-    // BNO
+// BNO
     ENVData->bno_temp = bno.getTemp();
 
-    //MCP9808
+//MCP9808
     ENVData->mcp_temp = tempsensor.readTempC();    // degC
 }
 
@@ -834,12 +830,12 @@ void read_imu(struct IMUData_s *IMUData)
     uint8_t system_cal, gyro_cal, accel_cal, mag_cal = 0;
     bno.getCalibration(&system_cal, &gyro_cal, &accel_cal, &mag_cal);
 
-    // get measurements
+// get measurements
     imu::Vector<3> mag = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER);    // (values in uT, micro Teslas)
     imu::Vector<3> gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE);    // (values in rps, radians per second)
     imu::Vector<3> accel = bno.getVector(Adafruit_BNO055::VECTOR_ACCELEROMETER);    // (values in m/s^2)
 
-    // assign them into structure fields
+// assign them into structure fields
     IMUData->system_calibration = system_cal;
     IMUData->accel_calibration = accel_cal;
     IMUData->gyro_calibration = gyro_cal;
@@ -864,16 +860,16 @@ uint16_t create_HK_pkt(uint8_t HK_Pkt_Buff[])
      *  Packet data is filled into the memory passed in as the argument
      *
      */
-    // get the current time from the RTC
+// get the current time from the RTC
     DateTime now = rtc.now();
 
-    // initalize counter to record length of packet
+// initalize counter to record length of packet
     uint16_t payloadSize = 0;
 
-    // add length of primary header
+// add length of primary header
     payloadSize += sizeof(CCSDS_PriHdr_t);
 
-    // Populate primary header fields:
+// Populate primary header fields:
     setAPID(HK_Pkt_Buff, PACKET_COUNTER_APID);
     setSecHdrFlg(HK_Pkt_Buff, 1);
     setPacketType(HK_Pkt_Buff, 0);
@@ -881,21 +877,21 @@ uint16_t create_HK_pkt(uint8_t HK_Pkt_Buff[])
     setSeqCtr(HK_Pkt_Buff, 0);
     setSeqFlg(HK_Pkt_Buff, 0);
 
-    // add length of secondary header
+// add length of secondary header
     payloadSize += sizeof(CCSDS_TlmSecHdr_t);
 
-    // Populate the secondary header fields:
+// Populate the secondary header fields:
     setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
     setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
 
-    // Add counter values to the pkt
+// Add counter values to the pkt
     payloadSize = addIntToTlm(CmdExeCtr, HK_Pkt_Buff, payloadSize);    // Add counter of sent packets to message
     payloadSize = addIntToTlm(CmdRejCtr, HK_Pkt_Buff, payloadSize);    // Add counter of sent packets to message
     payloadSize = addIntToTlm(XbeeRcvdByteCtr, HK_Pkt_Buff, payloadSize);    // Add counter of sent packets to message
     payloadSize = addIntToTlm(XbeeSentByteCtr, HK_Pkt_Buff, payloadSize);    // Add counter of sent packets to message
     payloadSize = addIntToTlm(millis() / 1000L, HK_Pkt_Buff, payloadSize);    // Timer
 
-    // fill the length field
+// fill the length field
     setPacketLength(HK_Pkt_Buff, payloadSize);
 
     return payloadSize;
@@ -910,16 +906,16 @@ uint16_t create_ENV_pkt(uint8_t HK_Pkt_Buff[], struct ENVData_s ENVData)
      *  Packet data is filled into the memory passed in as the argument
      *
      */
-    // get the current time from the RTC
+// get the current time from the RTC
     DateTime now = rtc.now();
 
-    // initalize counter to record length of packet
+// initalize counter to record length of packet
     uint16_t payloadSize = 0;
 
-    // add length of primary header
+// add length of primary header
     payloadSize += sizeof(CCSDS_PriHdr_t);
 
-    // Populate primary header fields:
+// Populate primary header fields:
     setAPID(HK_Pkt_Buff, ENVIRONMENTAL_PACKET_APID);
     setSecHdrFlg(HK_Pkt_Buff, 1);
     setPacketType(HK_Pkt_Buff, 0);
@@ -927,14 +923,14 @@ uint16_t create_ENV_pkt(uint8_t HK_Pkt_Buff[], struct ENVData_s ENVData)
     setSeqCtr(HK_Pkt_Buff, 0);
     setSeqFlg(HK_Pkt_Buff, 0);
 
-    // add length of secondary header
+// add length of secondary header
     payloadSize += sizeof(CCSDS_TlmSecHdr_t);
 
-    // Populate the secondary header fields:
+// Populate the secondary header fields:
     setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
     setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
 
-    // Add counter values to the pkt
+// Add counter values to the pkt
     payloadSize = addFloatToTlm(ENVData.bme_pres, HK_Pkt_Buff, payloadSize);    // Add bme pressure to message [Float]
     payloadSize = addFloatToTlm(ENVData.bme_temp, HK_Pkt_Buff, payloadSize);    // Add bme temperature to message [Float]
     payloadSize = addFloatToTlm(ENVData.bme_humid, HK_Pkt_Buff, payloadSize);    // Add bme humidity to message [Float]
@@ -943,7 +939,7 @@ uint16_t create_ENV_pkt(uint8_t HK_Pkt_Buff[], struct ENVData_s ENVData)
     payloadSize = addFloatToTlm(ENVData.bno_temp, HK_Pkt_Buff, payloadSize);    // Add bno temperature to message [Float]
     payloadSize = addFloatToTlm(ENVData.mcp_temp, HK_Pkt_Buff, payloadSize);    // Add mcp temperature to message [Float]
 
-    // fill the length field
+// fill the length field
     setPacketLength(HK_Pkt_Buff, payloadSize);
 
     return payloadSize;
@@ -958,16 +954,16 @@ uint16_t create_PWR_pkt(uint8_t HK_Pkt_Buff[], struct PWRData_s PWRData)
      *  Packet data is filled into the memory passed in as the argument
      *
      */
-    // get the current time from the RTC
+// get the current time from the RTC
     DateTime now = rtc.now();
 
-    // initalize counter to record length of packet
+// initalize counter to record length of packet
     uint16_t payloadSize = 0;
 
-    // add length of primary header
+// add length of primary header
     payloadSize += sizeof(CCSDS_PriHdr_t);
 
-    // Populate primary header fields:
+// Populate primary header fields:
     setAPID(HK_Pkt_Buff, POWER_PACKET_APID);
     setSecHdrFlg(HK_Pkt_Buff, 1);
     setPacketType(HK_Pkt_Buff, 0);
@@ -975,18 +971,18 @@ uint16_t create_PWR_pkt(uint8_t HK_Pkt_Buff[], struct PWRData_s PWRData)
     setSeqCtr(HK_Pkt_Buff, 0);
     setSeqFlg(HK_Pkt_Buff, 0);
 
-    // add length of secondary header
+// add length of secondary header
     payloadSize += sizeof(CCSDS_TlmSecHdr_t);
 
-    // Populate the secondary header fields:
+// Populate the secondary header fields:
     setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
     setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
 
-    // Add counter values to the pkt
+// Add counter values to the pkt
     payloadSize = addFloatToTlm(PWRData.batt_volt, HK_Pkt_Buff, payloadSize);    // Add battery voltage to message [Float]
     payloadSize = addFloatToTlm(PWRData.i_consump, HK_Pkt_Buff, payloadSize);    // Add current consumption to message [Float]
 
-    // fill the length field
+// fill the length field
     setPacketLength(HK_Pkt_Buff, payloadSize);
 
     return payloadSize;
@@ -1001,16 +997,16 @@ uint16_t create_IMU_pkt(uint8_t HK_Pkt_Buff[], struct IMUData_s IMUData)
      *  Packet data is filled into the memory passed in as the argument
      *
      */
-    // get the current time from the RTC
+// get the current time from the RTC
     DateTime now = rtc.now();
 
-    // initalize counter to record length of packet
+// initalize counter to record length of packet
     uint16_t payloadSize = 0;
 
-    // add length of primary header
+// add length of primary header
     payloadSize += sizeof(CCSDS_PriHdr_t);
 
-    // Populate primary header fields:
+// Populate primary header fields:
     setAPID(HK_Pkt_Buff, IMU_PACKET_APID);
     setSecHdrFlg(HK_Pkt_Buff, 1);
     setPacketType(HK_Pkt_Buff, 0);
@@ -1018,14 +1014,14 @@ uint16_t create_IMU_pkt(uint8_t HK_Pkt_Buff[], struct IMUData_s IMUData)
     setSeqCtr(HK_Pkt_Buff, 0);
     setSeqFlg(HK_Pkt_Buff, 0);
 
-    // add length of secondary header
+// add length of secondary header
     payloadSize += sizeof(CCSDS_TlmSecHdr_t);
 
-    // Populate the secondary header fields:
+// Populate the secondary header fields:
     setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
     setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
 
-    // Add counter values to the pkt
+// Add counter values to the pkt
     payloadSize = addIntToTlm(IMUData.system_calibration, HK_Pkt_Buff, payloadSize);    // Add system cal status to message [uint8_t]
     payloadSize = addIntToTlm(IMUData.accel_calibration, HK_Pkt_Buff, payloadSize);    // Add accelerometer cal status to message [uint8_t]
     payloadSize = addIntToTlm(IMUData.gyro_calibration, HK_Pkt_Buff, payloadSize);    // Add gyro cal status to message [uint8_t]
@@ -1040,7 +1036,7 @@ uint16_t create_IMU_pkt(uint8_t HK_Pkt_Buff[], struct IMUData_s IMUData)
     payloadSize = addFloatToTlm(IMUData.mag_y, HK_Pkt_Buff, payloadSize);    // Add battery accelerometer y to message [Float]
     payloadSize = addFloatToTlm(IMUData.mag_z, HK_Pkt_Buff, payloadSize);    // Add battery accelerometer z to message [Float]
 
-    // fill the length field
+// fill the length field
     setPacketLength(HK_Pkt_Buff, payloadSize);
 
     return payloadSize;
@@ -1055,7 +1051,7 @@ void xbee_send_and_log(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
      *  Also updates the radio sent counter.
      */
 
-    // send the data via xbee
+// send the data via xbee
     _sendData(dest_addr, data, data_len);
 
     debug_serial.print("Forwarding: ");
@@ -1066,10 +1062,10 @@ void xbee_send_and_log(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
     }
     debug_serial.println();
 
-    // log the sent data
+// log the sent data
     logPkt(xbeeLogFile, data, sizeof(data), 0);
 
-    // update the xbee send ctr
+// update the xbee send ctr
     XbeeSentByteCtr += data_len;
 }
 
@@ -1082,7 +1078,7 @@ void logPkt(File file, uint8_t data[], uint8_t len, uint8_t received_flg)
      *  of the received_flg.
      */
 
-    // if the file is open
+// if the file is open
     if (file)
     {
 
@@ -1123,10 +1119,10 @@ void print_time(File file)
      *  Prints the current time to the given log file
      */
 
-    // get the current time from the RTC
+// get the current time from the RTC
     DateTime now = rtc.now();
 
-    // print a datestamp to the file
+// print a datestamp to the file
     char buf[50];
     sprintf(buf, "%02d/%02d/%02d %02d:%02d:%02d", now.day(), now.month(), now.year(), now.hour(), now.minute(), now.second());
     file.print(buf);
@@ -1147,7 +1143,7 @@ void retract(int pulse_seconds)
 void controlActuator(int direction, int pulse_seconds)
 {
 #ifdef mars_1
-    // actuator with built-in polarity switch
+// actuator with built-in polarity switch
     int frequency = 0;
     if (direction < 0)
     {
@@ -1160,7 +1156,7 @@ void controlActuator(int direction, int pulse_seconds)
 
     unsigned long start_milliseconds = millis();
 
-    // send signal: 1 ms retract, 2 ms extend
+// send signal: 1 ms retract, 2 ms extend
     while (millis() <= start_milliseconds + (pulse_seconds * 1000))
     {
         digitalWrite(ACTUATOR_CONTROL_PIN, HIGH);
@@ -1171,7 +1167,7 @@ void controlActuator(int direction, int pulse_seconds)
 #endif
 
 #ifdef mars_2
-    // actuator without built-in polarity switch
+// actuator without built-in polarity switch
     if (direction < 0)
     {
         digitalWrite(ACTUATOR_PIN_HBRIDGE_A, LOW);
@@ -1199,16 +1195,16 @@ uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
      *  Packet data is filled into the memory passed in as the argument
      *
      */
-    // get the current time from the RTC
+// get the current time from the RTC
     DateTime now = rtc.now();
 
-    // initalize counter to record length of packet
+// initalize counter to record length of packet
     uint16_t payloadSize = 0;
 
-    // add length of primary header
+// add length of primary header
     payloadSize += sizeof(CCSDS_PriHdr_t);
 
-    // Populate primary header fields:
+// Populate primary header fields:
     setAPID(HK_Pkt_Buff, STATUS_APID);
     setSecHdrFlg(HK_Pkt_Buff, 1);
     setPacketType(HK_Pkt_Buff, 0);
@@ -1216,17 +1212,17 @@ uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
     setSeqCtr(HK_Pkt_Buff, 0);
     setSeqFlg(HK_Pkt_Buff, 0);
 
-    // add length of secondary header
+// add length of secondary header
     payloadSize += sizeof(CCSDS_TlmSecHdr_t);
 
-    // Populate the secondary header fields:
+// Populate the secondary header fields:
     setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
     setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
 
-    // Add counter values to the pkt
+// Add counter values to the pkt
     payloadSize = addIntToTlm(message, HK_Pkt_Buff, payloadSize);
 
-    // fill the length field
+// fill the length field
     setPacketLength(HK_Pkt_Buff, payloadSize);
 
     return payloadSize;
