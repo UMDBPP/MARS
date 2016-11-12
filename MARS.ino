@@ -57,6 +57,7 @@
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 bool extended = false;
+bool kill = false;
 
 //// Enumerations
 // logging flag
@@ -67,6 +68,9 @@ bool extended = false;
 #define COMMAND_RETRACT_ACTUATOR 01
 #define COMMAND_EXTEND_ACTUATOR 02
 #define REQUEST_ACTUATOR_STATUS 03
+#define COMMAND_DEAD_MAN 04
+#define COMMAND_KILL 05
+
 
 /* response codes */
 #define INIT_RESPONSE 0xAC
@@ -74,6 +78,8 @@ bool extended = false;
 #define BAD_COMMAND_RESPONSE 0xBB
 #define RETRACT_RESPONSE 0xE1
 #define EXTEND_RESPONSE 0xE2
+#define KILL_RESPONSE 0xE3
+#define DEAD_MAN_RESPONSE 0xE4
 
 // CAMERA FcnCodes
 #define COMMAND_NOOP 0
@@ -102,6 +108,7 @@ SSC ssc(0x28, 255);
 // so that the user doesn't have to keep track of which is which
 #define debug_serial Serial
 #define xbee_serial Serial3
+
 
 //// Data Structures
 // imu data
@@ -159,6 +166,8 @@ uint32_t XbeeSentByteCtr = 0;
 
 // other variables
 uint32_t start_millis = 0;
+uint32_t new_millis = 0;
+
 
 // logging files
 File xbeeLogFile;
@@ -354,6 +363,8 @@ void setup(void)
 #endif
 
     retract(6);
+    delay(6000);
+    extend(6);
 }
 
 void loop(void)
@@ -364,6 +375,14 @@ void loop(void)
      *  Log sensors
      *  Reads from xbee and processes any data
      */
+     
+     if ((millis() - new_millis) >= 360000)
+     {
+      if (kill == false)
+      {
+         retract(12);
+      }
+     }
 
     // declare structures to store data
     IMUData_s IMUData;
@@ -594,6 +613,35 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 break;
 
                 // unrecognized fcn code
+                
+            case COMMAND_KILL:
+                debug_serial.println("KILL!!!!!");
+
+                // extract the desintation address from the command
+                extractFromTlm(destAddr, data, 8);
+
+                // create a pkt
+                pktLength = create_Status_pkt(Pkt_Buff, KILL_RESPONSE);
+
+                // send the HK packet via xbee and log it
+                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
+
+                kill = true;
+                break;
+
+            case COMMAND_DEAD_MAN:
+                debug_serial.println("Received extend actuator command");
+
+                // extract the desintation address from the command
+                extractFromTlm(destAddr, data, 8);
+
+                // create a pkt
+                pktLength = create_Status_pkt(Pkt_Buff, DEAD_MAN_RESPONSE);
+
+                // send the HK packet via xbee and log it
+                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
+
+                new_millis = millis();
             case COMMAND_EXTEND_ACTUATOR:
                 debug_serial.println("Received extend actuator command");
 
@@ -623,7 +671,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
 
-                retract(6);
+                retract(15);
 
                 // increment the cmd executed counter
                 CmdExeCtr++;
