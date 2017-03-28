@@ -50,7 +50,7 @@
 // DO NOT CHANGE without making corresponding change in ground system definitions
 
 /* APIDs */
-#define COMMAND_APID 500
+#define COMMAND_APID 5
 #define STATUS_APID 501
 #define PACKET_COUNTER_APID 510
 #define ENVIRONMENTAL_PACKET_APID 520
@@ -684,9 +684,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-
                 retract(15);
-
                 // increment the cmd executed counter
                 CmdExeCtr++;
                 break;
