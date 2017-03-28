@@ -14,7 +14,7 @@
 #include <ccsds_util.h>
 #include <SSC.h>
 
-#define mars_1
+#define mars_2
 
 // Program Specific Constants
 
