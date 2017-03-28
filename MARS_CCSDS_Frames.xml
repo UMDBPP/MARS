@@ -6,13 +6,13 @@
   <repeat_period>500</repeat_period>
   <frames_list>
     <frame name="Extend">
-      <payload>7E000C0001000000000000000600F206</payload>
+      <payload>7E007D33000100000000000000050018050000000002F2E8</payload>
     </frame>
     <frame name="Retract">
-      <payload>7E000C0001000000000000000600F107</payload>
+      <payload>7E007D33000100000000000000050018050000000001F1EA</payload>
     </frame>
     <frame name="Status">
-      <payload>7E000C00010000000000000006000EEA</payload>
+      <payload>7E007D330001000000000000000500180501000000030ECA</payload>
     </frame>
   </frames_list>
 </data>
