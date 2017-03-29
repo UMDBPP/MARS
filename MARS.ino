@@ -50,7 +50,7 @@
 // DO NOT CHANGE without making corresponding change in ground system definitions
 
 /* APIDs */
-#define COMMAND_APID 5
+#define COMMAND_APID 500
 #define STATUS_APID 501
 #define PACKET_COUNTER_APID 510
 #define ENVIRONMENTAL_PACKET_APID 520
@@ -192,6 +192,7 @@ uint16_t create_IMU_pkt(uint8_t HK_Pkt_Buff[], struct IMUData_s IMUData);
 uint16_t create_PWR_pkt(uint8_t HK_Pkt_Buff[], struct PWRData_s PWRData);
 uint16_t create_ENV_pkt(uint8_t HK_Pkt_Buff[], struct ENVData_s ENVData);
 uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message);
+uint16_t _APID2;
 
 // sensor reading
 void read_imu(struct IMUData_s *IMUData);
@@ -381,13 +382,6 @@ void loop(void)
      *  Reads from xbee and processes any data
      */
 
-    if ((millis() - last_keepalive_millis) >= 360000)
-    {
-        if (armed == true)
-        {
-            retract(12);
-        }
-    }
 
 // declare structures to store data
     IMUData_s IMUData;
@@ -478,7 +472,6 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
 // get the APID (the field which identifies the type of packet)
     uint16_t _APID = getAPID(data);
-
 // check if the data is a command packet with the Camera command APID
     if (getPacketType(data) && _APID == COMMAND_APID)
     {
@@ -486,7 +479,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
         uint8_t FcnCode = getCmdFunctionCode(data);
         uint16_t pktLength = 0;
         uint8_t Pkt_Buff[100];
-        uint8_t destAddr = 0;
+        uint8_t destAddr = 2;
 
         // respond to the command depending on what type of command it is
         switch (FcnCode)
