@@ -368,7 +368,7 @@ void setup(void)
 
     retract(10);
     delay(6000);
-    extend(6);
+    extend(4);
 
     armed = true;
 }
