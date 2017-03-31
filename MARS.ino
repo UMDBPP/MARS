@@ -677,7 +677,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-                retract(15);
+                retract(30);
                 // increment the cmd executed counter
                 CmdExeCtr++;
                 break;
