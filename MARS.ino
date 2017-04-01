@@ -366,9 +366,9 @@ void setup(void)
     digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 #endif
 
-    retract(10);
+    retract(20);
     delay(6000);
-    extend(4);
+    extend(6);
 
     armed = true;
 }
