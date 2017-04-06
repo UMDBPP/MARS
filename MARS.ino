@@ -20,7 +20,7 @@
 
 #ifdef mars_1
 
-#define timer 360 // seconds after last keepalive when actuator will retract
+//#define timer 360 // seconds after last keepalive when actuator will retract
 
 #define ACTUATOR_CONTROL_PIN 2
 
@@ -441,7 +441,7 @@ void loop(void)
         command_response(ReadData, BytesRead, IMUData, ENVData, PWRData);
     }
 
-// if time on exceeds timer set in program constants, then retract actuator
+/* if time on exceeds timer set in program constants, then retract actuator
 #ifdef timer
     if (millis() > (timer * 1000))
     {
@@ -451,7 +451,7 @@ void loop(void)
 
 // wait a bit
     delay(10);
-
+*/
 }
 
 void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData, struct ENVData_s ENVData, struct PWRData_s PWRData)
@@ -654,7 +654,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
-
+                destAddr = 2;
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
 
@@ -671,7 +671,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
-
+                destAddr = 2;
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
 
