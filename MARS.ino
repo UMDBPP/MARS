@@ -172,6 +172,8 @@ uint32_t XbeeSentByteCtr = 0;
 uint32_t start_millis = 0;
 uint32_t last_keepalive_millis = 0;
 
+
+uint32_t destaddr = 2;
 // logging files
 File xbeeLogFile;
 File IMULogFile;
@@ -366,7 +368,7 @@ void setup(void)
     digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 #endif
 
-    retract(20);
+    retract(10);
     delay(6000);
     extend(6);
 
@@ -442,12 +444,6 @@ void loop(void)
     }
 
 // if time on exceeds timer set in program constants, then retract actuator
-#ifdef timer
-    if (millis() > (timer * 1000))
-    {
-        retract(10);
-    }
-#endif
 
 // wait a bit
     delay(10);
@@ -657,6 +653,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 // create a pkt
                 pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
+                destaddr = 2;
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
@@ -668,6 +665,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 break;
             case COMMAND_RETRACT_ACTUATOR:
                 debug_serial.println("Received retract actuator command");
+                destaddr = 2;
 
                 // extract the desintation address from the command
                 extractFromTlm(destAddr, data, 8);
