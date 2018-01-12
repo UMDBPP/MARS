@@ -245,8 +245,9 @@ void setup(void)
      *    defaults to that baud rate. higher baud rates need to be tested
      *    before they're used with those devices
      */
-    debug_serial.begin(9600);
-    xbeee.setSerial(Serial);
+    debug_serial.begin(250000);
+    Serial2.begin(9600);
+    xbeee.setSerial(Serial2);
 
     debug_serial.println("GoGoGadget Camera payload!");
 
@@ -294,12 +295,7 @@ void setup(void)
     // xbee
     debug_serial.println("Beginning xbee init");
 
-<<<<<<< HEAD
     if (!InitStat.xbeeStatus)
-=======
-    int xbeeStatus = InitXBee(XBEE_ADDR, XBEE_PAN_ID, xbee_serial, false);
-    if (!xbeeStatus)
->>>>>>> origin/master
     {
         debug_serial.println("XBee Initialized!");
     }
@@ -340,9 +336,6 @@ void setup(void)
     digitalWrite(ACTUATOR_PIN_HBRIDGE_B, LOW);
 #endif
 
-    retract(10);
-    delay(6000);
-    extend(6);
 
     armed = true;
 }

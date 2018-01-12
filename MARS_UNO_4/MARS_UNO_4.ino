@@ -245,8 +245,8 @@ void setup(void)
      *    defaults to that baud rate. higher baud rates need to be tested
      *    before they're used with those devices
      */
-    debug_serial.begin(250000);
-    xbeee.setSerial(Serial2);
+    debug_serial.begin(9600);
+    xbeee.setSerial(Serial);
 
     debug_serial.println("GoGoGadget Camera payload!");
 
@@ -320,9 +320,8 @@ void setup(void)
     //MicroSD
     // appends to current file
     // NOTE: Filenames must be shorter than 8 characters
-    int blargh[4] = {0,1,0,2};
     debug_serial.println("send cmd");
-    sendCmdMsg(5, 01, *blargh, 4); // sends message to mars 2 to release
+    sendCmdMsg(5, COMMAND_RETRACT_ACTUATOR, NULL, 0); // sends message to mars 2 to release
     debug_serial.println("sent cmd");
 #ifdef mars_1
     pinMode(ACTUATOR_CONTROL_PIN, OUTPUT);
