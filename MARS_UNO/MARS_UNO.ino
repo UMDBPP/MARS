@@ -91,7 +91,7 @@ bool armed = true;
 #define REQUEST_IMU_DATA 40
 #define COMMAND_REBOOT 99
 
-#define PAN_ID 0x0B0B // XBee PAN address (must be the same for all xbees)
+#define XBEE_PAN_ID 0x0B0B // XBee PAN address (must be the same for all xbees)
 // DO NOT CHANGE without changing for all xbees
 #define LINK_XBEE_ADDRESS 0x0002
 // DO NOT CHANGE without confirming with ground system definitions
@@ -275,7 +275,7 @@ void setup(void)
     // xbee
     debug_serial.println("Beginning xbee init");
 
-    int xbeeStatus = InitXBee(XBEE_ADDR, PAN_ID, xbee_serial, false);
+    int xbeeStatus = InitXBee(XBEE_ADDR, XBEE_PAN_ID, xbee_serial, false);
     if (!xbeeStatus)
     {
         debug_serial.println("XBee Initialized!");
