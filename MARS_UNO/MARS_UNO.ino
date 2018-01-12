@@ -3,12 +3,17 @@
 #include <SPI.h>
 #include <RTClib.h> // RTC and SoftRTC
 #include <SD.h>
-#include <CCSDS.h>
-#include <ccsds_xbee.h>
-#include <ccsds_util.h>
+#include "CCSDS.h"
+#include "ccsds_xbee.h"
+#include "ccsds_util.h"
 #include <SSC.h>
-#include <Xbee.h>
 #include <SoftwareSerial.h>
+
+#ifndef Xbee_h
+#define Xbee_h
+#include <Xbee.h>
+#endif
+
 #define mars_2
 
 
@@ -104,7 +109,9 @@ SSC ssc(0x28, 255);
 //// Serial object aliases
 // so that the user doesn't have to keep track of which is which
 #define debug_serial Serial
-#define xbee_serial Serial
+XBee xbeee = XBee(); //needs 3 e because libraries
+XBeeResponse response = XBeeResponse();
+
 
 //// Data Structures
 // imu data
@@ -188,6 +195,18 @@ uint16_t create_ENV_pkt(uint8_t HK_Pkt_Buff[], struct ENVData_s ENVData);
 uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message);
 uint16_t _APID2;
 
+struct InitStat_s {
+  uint8_t xbeeStatus;
+  uint8_t rtc_running;
+  uint8_t rtc_start;
+  uint8_t BNO_init;
+  uint8_t MCP_init;
+  uint8_t BME_init;
+  uint8_t SSC_init;
+  uint8_t SD_detected;
+}; 
+
+InitStat_s InitStat;
 // sensor reading
 void read_imu(struct IMUData_s *IMUData);
 void read_env(struct ENVData_s *ENVData);
@@ -226,8 +245,8 @@ void setup(void)
      *    defaults to that baud rate. higher baud rates need to be tested
      *    before they're used with those devices
      */
-    debug_serial.begin(250000);
-    xbee_serial.begin(9600);
+    debug_serial.begin(9600);
+    xbeee.setSerial(Serial);
 
     debug_serial.println("GoGoGadget Camera payload!");
 
@@ -275,15 +294,14 @@ void setup(void)
     // xbee
     debug_serial.println("Beginning xbee init");
 
-    int xbeeStatus = InitXBee(XBEE_ADDR, PAN_ID, xbee_serial, false);
-    if (!xbeeStatus)
+    if (!InitStat.xbeeStatus)
     {
         debug_serial.println("XBee Initialized!");
     }
     else
     {
         debug_serial.print("XBee Failed to Initialize with Error Code: ");
-        debug_serial.println(xbeeStatus);
+        debug_serial.println(InitStat.xbeeStatus);
     }
 
     //// Init SSC
