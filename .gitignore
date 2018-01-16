@@ -30,7 +30,7 @@ local.properties
 
 # Arduino
 spec.d
-
+*.ino.cpp
 
 #################
 ## Visual Studio
@@ -217,4 +217,3 @@ pip-log.txt
 
 #Mr Developer
 .mr.developer.cfg
-.ino.cpp
