@@ -1,9 +1,10 @@
-int timeout_seconds 600    // seconds after last keepalive when actuator will retract
+// seconds after last keepalive when actuator will retract
+int timeout_seconds = 600;
 
-int ACTUATOR_PIN_HBRIDGE_A = 3
-int ACTUATOR_PIN_HBRIDGE_B = 4
+int ACTUATOR_PIN_HBRIDGE_A = 3;
+int ACTUATOR_PIN_HBRIDGE_B = 4;
 
-bool retracted = false
+bool retracted = false;
 
 void setup(void)
 {
@@ -24,7 +25,7 @@ void loop(void)
     if (!retracted && millis() > timeout_seconds * 1000)
     {
         retract(10);
-        retracted = true
+        retracted = true;
     }
 
     // wait a bit
