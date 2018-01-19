@@ -9,10 +9,10 @@
 #include <SSC.h>
 #include <SoftwareSerial.h>
 
-#ifndef Xbee_h
-#define Xbee_h
+//#ifndef Xbee_h
+//#define Xbee_h
 #include <Xbee.h>
-#endif
+//#endif
 
 #define mars_2
 
@@ -109,6 +109,7 @@ SSC ssc(0x28, 255);
 //// Serial object aliases
 // so that the user doesn't have to keep track of which is which
 #define debug_serial Serial
+#define xbee_serial Serial2
 XBee xbeee = XBee(); //needs 3 e because libraries
 XBeeResponse response = XBeeResponse();
 
@@ -204,7 +205,7 @@ struct InitStat_s {
   uint8_t BME_init;
   uint8_t SSC_init;
   uint8_t SD_detected;
-}; 
+};
 
 InitStat_s InitStat;
 // sensor reading
@@ -246,11 +247,8 @@ void setup(void)
      *    before they're used with those devices
      */
     debug_serial.begin(250000);
-    Serial2.begin(9600);
-    xbeee.setSerial(Serial2);
-
-    debug_serial.println("GoGoGadget Camera payload!");
-
+    xbee_serial.begin(9600);
+    xbeee.setSerial(xbee_serial);
 
     //// RTC
     /* The RTC is used so that the log files contain timestamps. If the RTC
@@ -378,10 +376,15 @@ void loop(void)
     }
 
 // if time on exceeds timer set in program constants, then retract actuator
+    // if time on exceeds timeout seconds set in program constants, then retract actuator
+    if (!retracted && millis() > timeout_seconds * 1000)
+    {
+        retract(10);
+        retracted = true;
+    }
 
-// wait a bit
-    delay(10);
-
+    // wait a bit
+    delay(1);
 }
 
 void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData, struct ENVData_s ENVData, struct PWRData_s PWRData)
@@ -468,7 +471,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 break;
 
                 // ENV_Req
-           
+
             case COMMAND_REBOOT:
                 // Requests that Link reboot
                 debug_serial.println("Received Reboot Cmd");
@@ -511,7 +514,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 last_keepalive_millis = millis();
                 break;
-                
+
             case COMMAND_EXTEND_ACTUATOR:
                 debug_serial.println("Received extend actuator command");
 

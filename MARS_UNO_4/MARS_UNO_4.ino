@@ -9,10 +9,10 @@
 #include <SSC.h>
 #include <SoftwareSerial.h>
 
-#ifndef Xbee_h
-#define Xbee_h
+//#ifndef Xbee_h
+//#define Xbee_h
 #include <Xbee.h>
-#endif
+//#endif
 
 #define mars_2
 
@@ -108,10 +108,10 @@ SSC ssc(0x28, 255);
 
 //// Serial object aliases
 // so that the user doesn't have to keep track of which is which
-#define debug_serial Serial
+#define debug_serial Serial0
+#define xbee_serial Serial2
 XBee xbeee = XBee(); //needs 3 e because libraries
 XBeeResponse response = XBeeResponse();
-
 
 //// Data Structures
 // imu data
@@ -204,7 +204,7 @@ struct InitStat_s {
   uint8_t BME_init;
   uint8_t SSC_init;
   uint8_t SD_detected;
-}; 
+};
 
 InitStat_s InitStat;
 // sensor reading
@@ -245,10 +245,12 @@ void setup(void)
      *    defaults to that baud rate. higher baud rates need to be tested
      *    before they're used with those devices
      */
-    debug_serial.begin(9600);
+
+    //debug_serial.begin(9600);
+    //xbee_serial.begin(9600);
+
     xbeee.setSerial(Serial);
 
-    debug_serial.println("GoGoGadget Camera payload!");
 
 
     //// RTC
@@ -320,9 +322,7 @@ void setup(void)
     //MicroSD
     // appends to current file
     // NOTE: Filenames must be shorter than 8 characters
-    debug_serial.println("send cmd");
-    sendCmdMsg(5, COMMAND_RETRACT_ACTUATOR, NULL, 0); // sends message to mars 2 to release
-    debug_serial.println("sent cmd");
+    //sendCmdMsg(LINK_XBEE_ADDRESS, COMMAND_RETRACT_ACTUATOR, NULL, 0); // sends message to mars 2 to release
 #ifdef mars_1
     pinMode(ACTUATOR_CONTROL_PIN, OUTPUT);
 
@@ -342,8 +342,8 @@ void setup(void)
     extend(6);
 
     armed = true;
-    
-    
+
+
 }
 
 void loop(void)
@@ -384,9 +384,15 @@ void loop(void)
     }
 
 // if time on exceeds timer set in program constants, then retract actuator
+    // if time on exceeds timeout seconds set in program constants, then retract actuator
+    if (!retracted && millis() > timeout_seconds * 1000)
+    {
+        retract(10);
+        retracted = true;
+    }
 
-// wait a bit
-    delay(10);
+    // wait a bit
+    delay(1);
 
 }
 
@@ -474,7 +480,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
                 break;
 
                 // ENV_Req
-           
+
             case COMMAND_REBOOT:
                 // Requests that Link reboot
                 debug_serial.println("Received Reboot Cmd");
@@ -517,7 +523,7 @@ void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData
 
                 last_keepalive_millis = millis();
                 break;
-                
+
             case COMMAND_EXTEND_ACTUATOR:
                 debug_serial.println("Received extend actuator command");
 
