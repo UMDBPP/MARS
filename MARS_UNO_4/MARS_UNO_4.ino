@@ -108,7 +108,7 @@ SSC ssc(0x28, 255);
 
 //// Serial object aliases
 // so that the user doesn't have to keep track of which is which
-#define debug_serial Serial0
+#define debug_serial Serial
 #define xbee_serial Serial2
 XBee xbeee = XBee(); //needs 3 e because libraries
 XBeeResponse response = XBeeResponse();
@@ -180,6 +180,9 @@ File ENVLogFile;
 File PWRLogFile;
 File initLogFile;
 
+bool retracted = false;
+int timeout_seconds = 60;
+
 //// Function prototypes
 void command_response(uint8_t data[], uint8_t data_len, struct IMUData_s IMUData, struct ENVData_s ENVData, struct PWRData_s PWRData);
 
@@ -246,10 +249,10 @@ void setup(void)
      *    before they're used with those devices
      */
 
-    //debug_serial.begin(9600);
-    //xbee_serial.begin(9600);
+    debug_serial.begin(250000);
+    xbee_serial.begin(9600);
 
-    xbeee.setSerial(Serial);
+    xbeee.setSerial(xbee_serial);
 
 
 
@@ -322,7 +325,8 @@ void setup(void)
     //MicroSD
     // appends to current file
     // NOTE: Filenames must be shorter than 8 characters
-    //sendCmdMsg(LINK_XBEE_ADDRESS, COMMAND_RETRACT_ACTUATOR, NULL, 0); // sends message to mars 2 to release
+    sendCmdMsg(LINK_XBEE_ADDRESS, COMMAND_RETRACT_ACTUATOR, NULL, 0);    // sends message to mars 2 to release
+
 #ifdef mars_1
     pinMode(ACTUATOR_CONTROL_PIN, OUTPUT);
 
