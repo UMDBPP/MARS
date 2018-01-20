@@ -41,10 +41,11 @@
 
 // Program Specific Constants
 
+// green MARS is holding TARDIS on NS74
 #ifdef green_mars
 
 // seconds after which actuator will retract
-long timeout_seconds = 600;
+long timeout_seconds = 1020;
 
 //// Xbee setup parameters
 #define XBEE_ADDR 0x0004 // XBee address for this payload
@@ -60,10 +61,11 @@ long timeout_seconds = 600;
 
 #endif
 
+// black MARS is holding the entire payload string on NS74
 #ifdef black_mars
 
 // seconds after which actuator will retract
-long timeout_seconds = 600;
+long timeout_seconds = 1200;
 
 //// Xbee setup parameters
 #define XBEE_ADDR 0x0005 // XBee address for this payload
