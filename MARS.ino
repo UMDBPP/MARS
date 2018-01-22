@@ -1,7 +1,23 @@
+//// Includes:
 #include <avr/wdt.h>  // watchdog timer
-#include <ccsds_xbee.h>
+#include <Wire.h>
+#include <SPI.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
+#include <utility/imumaths.h>
+#include "Adafruit_MCP9808.h"
 #include "RTClib.h"  // RTC and SoftRTC
+#include <Adafruit_BME280.h>
 #include <SD.h>
+#include <Adafruit_ADS1015.h>
+#include <ccsds_xbee.h>
+#include <SSC.h>
+
+// Name
+#define PAYLOAD_NAME "MARS"
+// Must be no longer than 8 characters
+
+#define green_mars
 
 #define LINK_XBEE_ADDR 0x0002
 #define XBEE_PAN_ID 0x0B0B // XBee PAN address (must be the same for all xbees)
@@ -14,6 +30,7 @@
 #define COMMAND_NOOP 0
 #define REQUEST_PACKET_COUNTERS 10
 #define COMMAND_CLEAR_PACKET_COUNTERS 15
+#define REQUEST_PAYLOAD_NAME 19
 #define REQUEST_ENVIRONMENTAL_DATA 20
 #define REQUEST_POWER_DATA 30
 #define REQUEST_IMU_DATA 40
@@ -39,10 +56,6 @@
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 
-#define green_mars
-
-// Program Specific Constants
-
 // green MARS is holding TARDIS on NS74
 #ifdef green_mars
 
@@ -57,6 +70,7 @@ long timeout_seconds = 1020;
 #define COMMAND_APID 400
 #define STATUS_APID 401
 #define PACKET_COUNTER_APID 410
+#define PAYLOAD_NAME_APID 419
 #define ENVIRONMENTAL_PACKET_APID 420
 #define POWER_PACKET_APID 430
 #define IMU_PACKET_APID 440
@@ -77,11 +91,24 @@ long timeout_seconds = 1200;
 #define COMMAND_APID 500
 #define STATUS_APID 501
 #define PACKET_COUNTER_APID 510
+#define PAYLOAD_NAME_APID 519
 #define ENVIRONMENTAL_PACKET_APID 520
 #define POWER_PACKET_APID 530
 #define IMU_PACKET_APID 540
 
 #endif
+
+//// Timing
+// timing counters
+uint16_t imu_read_ctr = 0;
+uint16_t pwr_read_ctr = 0;
+uint16_t env_read_ctr = 0;
+
+// rate setting
+// sensors will be read every X cycles
+uint16_t imu_read_lim = 10;
+uint16_t pwr_read_lim = 100;
+uint16_t env_read_lim = 100;
 
 //// Interface counters
 // counters to track what data comes into/out of link
@@ -155,7 +182,6 @@ InitStat_s InitStat;
 //// Files
 // interface logging files
 File xbeeLogFile;
-File radioLogFile;
 File initLogFile;
 // data logging files
 File IMULogFile;
@@ -177,7 +203,7 @@ void setup()
     /* setup()
      *
      * Disables watchdog timer (in case its on)
-     * Initalizes all the link hardware/software including:
+     * Initalizes all the balloonduino hardware/software including:
      *   Serial
      *   Xbee
      *   RTC
@@ -257,8 +283,6 @@ void setup()
      */
 
     xbeeLogFile = SD.open("XBEE_LOG.txt", FILE_WRITE);
-    delay(10);
-    radioLogFile = SD.open("RDIO_LOG.txt", FILE_WRITE);
     delay(10);
 
     // for data files, write a header
@@ -364,9 +388,7 @@ void setup()
     //// set interface counters to zero
     CmdExeCtr = 0;
     CmdRejCtr = 0;
-    RadioRcvdByteCtr = 0;
     XbeeRcvdByteCtr = 0;
-    RadioSentByteCtr = 0;
     XbeeSentByteCtr = 0;
 
     // write entry in init log file
@@ -418,6 +440,63 @@ void setup()
 
 void loop()
 {
+    /*  loop()
+     *
+     *  Reads sensor data if cycle counters indicate to
+     *  Reads from xbee and processes any data
+     *  retracts actuator if timeout exceeded
+     */
+
+    // declare structures to store data
+    IMUData_s IMUData;
+    PWRData_s PWRData;
+    ENVData_s ENVData;
+
+    // increment read counters
+    imu_read_ctr++;
+    pwr_read_ctr++;
+    env_read_ctr++;
+
+    // read sensors if time between last read
+    if (imu_read_ctr > imu_read_lim)
+    {
+        read_imu(&IMUData);
+        log_imu(IMUData, IMULogFile);
+        imu_read_ctr = 0;
+    }
+    if (pwr_read_ctr > pwr_read_lim)
+    {
+        read_pwr(&PWRData);
+        log_pwr(PWRData, PWRLogFile);
+        pwr_read_ctr = 0;
+    }
+    if (env_read_ctr > env_read_lim)
+    {
+        read_env(&ENVData);
+        log_env(ENVData, ENVLogFile);
+        env_read_ctr = 0;
+    }
+
+    // initalize a counter to record how many bytes were read this iteration
+    int BytesRead = 0;
+
+    //// Read message from xbee
+
+    // xbee data arrives all at the same time, so its not necessary to remember
+    // it between iterations, so we use a local buffer
+    uint8_t ReadData[100];
+
+    // read the data from the xbee with a 1ms timeout
+    BytesRead = ccsds_xbee.readMsg(ReadData);
+
+    // if data was read, process it as a CCSDS packet
+    if (BytesRead > 0)
+    {
+        debug_serial.println('Received packet.');
+        // respond to the data
+        command_response(ReadData, BytesRead, IMUData, ENVData, PWRData);
+    }
+
     // if time on exceeds timeout seconds set in program constants, then retract actuator
     if (extended)
     {
@@ -426,26 +505,6 @@ void loop()
             debug_serial.println("Timeout exceeded.");
             retract(10);
             extended = false;
-        }
-
-        // initalize a counter to record how many bytes were read this iteration
-        int BytesRead = 0;
-
-        //// Read message from xbee
-
-        // xbee data arrives all at the same time, so its not necessary to remember
-        // it between iterations, so we use a local buffer
-        uint8_t ReadData[100];
-
-        // read the data from the xbee with a 1ms timeout
-        BytesRead = ccsds_xbee.readMsg(ReadData);
-
-        // if data was read, process it as a CCSDS packet
-        if (BytesRead > 0)
-        {
-            debug_serial.println('Received packet.');
-            // respond to the data
-            command_response(ReadData, BytesRead);
         }
     }
 
@@ -470,7 +529,7 @@ void command_response(uint8_t data[], uint8_t data_len,
     // get the APID (the field which identifies the type of packet)
     uint16_t _APID = getAPID(data);
 
-    if (_APID != LINK_CMD_APID)
+    if (_APID != COMMAND_APID)
     {
         debug_serial.print("Unrecognized apid 0x");
         debug_serial.println(_APID, HEX);
@@ -483,14 +542,16 @@ void command_response(uint8_t data[], uint8_t data_len,
     }
 
     // validate command checksum
-    if (!validateChecksum(data))
+    /*if (!validateChecksum(data))
     {
         Serial.println("Command checksum doesn't validate");
         CmdRejCtr++;
         return;
-    }
+     }*/
 
-    uint8_t FLTR_TBL_Buff[FILT_TBL_NUM_EL * 2 + 12];
+    uint8_t destAddr = 0;
+    uint16_t pktLength = 0;
+    uint8_t payloadLength = 0;
     uint8_t Pkt_Buff[100];
     uint8_t payload_buff[100];
 
@@ -499,7 +560,7 @@ void command_response(uint8_t data[], uint8_t data_len,
     {
 
         // NoOp Cmd
-        case LINK_NOOP_CMD:
+        case COMMAND_NOOP:
         {
             // No action other than to increment the interface counters
 
@@ -510,7 +571,7 @@ void command_response(uint8_t data[], uint8_t data_len,
             break;
         }
             // REQ_Name Cmd
-        case REQNAME_FCNCODE:
+        case REQUEST_PAYLOAD_NAME:
         {
             /*
              * This command requests that a packet containing the payload's
@@ -551,7 +612,7 @@ void command_response(uint8_t data[], uint8_t data_len,
                     payloadLength);
 
             // send the telemetry message by adding the buffer to the header
-            success_flg = ccsds_xbee.sendTlmMsg(NamedestAddr, NAME_APID,
+            success_flg = ccsds_xbee.sendTlmMsg(NamedestAddr, PAYLOAD_NAME_APID,
                     Name_Payload_Buff, payloadLength);
 
             if (success_flg > 0)
@@ -566,7 +627,7 @@ void command_response(uint8_t data[], uint8_t data_len,
             break;
         }
             // REQ_HK
-        case LINK_HKREQ_CMD:
+        case REQUEST_PACKET_COUNTERS:
         {
             // Requests that an HK packet be sent to the ground
             debug_serial.print("Received HKReq Cmd to addr ");
@@ -585,7 +646,7 @@ void command_response(uint8_t data[], uint8_t data_len,
             // create a HK pkt
             payloadLength = create_HK_payload(payload_buff);
 
-            pktLength = ccsds_xbee.createTlmMsg(Pkt_Buff, LINK_HK_APID,
+            pktLength = ccsds_xbee.createTlmMsg(Pkt_Buff, PACKET_COUNTER_APID,
                     payload_buff, payloadLength);
             if (pktLength > 0)
             {
@@ -596,6 +657,110 @@ void command_response(uint8_t data[], uint8_t data_len,
 
             // increment the cmd executed counter
             CmdExeCtr++;
+            break;
+        }
+        case COMMAND_CLEAR_PACKET_COUNTERS:
+        {
+            // Requests that an HK packet be sent to the specified xbee address
+            /*  Command format:
+             *   CCSDS Command Header (8 bytes)
+             *   Xbee address (1 byte)
+             */
+
+            debug_serial.println("Received ResetCtr Cmd");
+
+            break;
+        }
+        case COMMAND_REBOOT:
+        {
+            // Requests reboot
+            debug_serial.println("Received Reboot Cmd");
+
+            // set the reboot timer
+            wdt_enable (WDTO_1S);
+
+            break;
+        }
+        case COMMAND_DISARM:
+        {
+            debug_serial.println("received disarm command");
+
+            // extract the desintation address from the command
+            extractFromTlm(destAddr, data, 8);
+
+            // create a pkt
+            pktLength = create_Status_pkt(Pkt_Buff, DISARM_RESPONSE);
+
+            // send the HK packet via xbee and log it
+            send_and_log(destAddr, Pkt_Buff, pktLength);
+
+            disarm();
+
+            break;
+        }
+        case COMMAND_KEEPALIVE:
+        {
+            debug_serial.println("Received keepalive packet");
+
+            // extract the desintation address from the command
+            extractFromTlm(destAddr, data, 8);
+
+            // create a pkt
+            pktLength = create_Status_pkt(Pkt_Buff, KEEPALIVE_RESPONSE);
+
+            // send the HK packet via xbee and log it
+            send_and_log(destAddr, Pkt_Buff, pktLength);
+
+            break;
+        }
+        case COMMAND_EXTEND_ACTUATOR:
+        {
+            debug_serial.println("Received extend actuator command");
+
+            // extract the desintation address from the command
+            extractFromTlm(destAddr, data, 8);
+
+            // create a pkt
+            pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
+
+            // send the HK packet via xbee and log it
+            send_and_log(destAddr, Pkt_Buff, pktLength);
+
+            extend(6);
+
+            break;
+        }
+        case COMMAND_RETRACT_ACTUATOR:
+        {
+            debug_serial.println("Received retract actuator command");
+
+            // extract the desintation address from the command
+            extractFromTlm(destAddr, data, 8);
+
+            // create a pkt
+            pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
+
+            // send the HK packet via xbee and log it
+            send_and_log(destAddr, Pkt_Buff, pktLength);
+
+            retract(30);
+
+            break;
+        }
+        case REQUEST_ACTUATOR_STATUS:
+        {
+            debug_serial.println("Received actuator status request");
+
+            // extract the desintation address from the command
+            extractFromTlm(destAddr, data, 8);
+
+            // create a pkt
+            pktLength = create_Status_pkt(Pkt_Buff,
+                    (extended) ? EXTEND_RESPONSE : RETRACT_RESPONSE);
+
+            // send the HK packet via xbee and log it
+            send_and_log(destAddr, Pkt_Buff, pktLength);
+
             break;
         }
             // unrecognized fcn code
@@ -611,157 +776,12 @@ void command_response(uint8_t data[], uint8_t data_len,
 
 } // end command_response()
 
-void command_response(uint8_t data[], uint8_t data_len)
-{
-    /*  command_response()
-     *
-     *  given an array of data (presumably containing a CCSDS packet), check if the
-     *  packet is a command packet, and if so, process it
-     */
-
-    debug_serial.print("Rcvd: ");
-    for (int i = 0; i < 8; i++)
-    {
-        debug_serial.print(data[i], HEX);
-        debug_serial.print(", ");
-    }
-    debug_serial.println();
-
-    // get the APID (the field which identifies the type of packet)
-    uint16_t _APID = getAPID(data);
-
-    // check if the data is a command packet with the Camera command APID
-    if (getPacketType(data) && _APID == COMMAND_APID)
-    {
-        uint8_t FcnCode = getCmdFunctionCode(data);
-        uint16_t pktLength = 0;
-        uint8_t Pkt_Buff[100];
-        uint8_t destAddr = 2;
-
-        // respond to the command depending on what type of command it is
-        switch (FcnCode)
-        {
-
-            // NoOp Cmd
-            case COMMAND_NOOP:
-                // No action other than to increment the interface counters
-
-                debug_serial.println("Received NoOp Cmd");
-
-                break;
-
-                // HK_Req
-            case COMMAND_CLEAR_PACKET_COUNTERS:
-                // Requests that an HK packet be sent to the specified xbee address
-                /*  Command format:
-                 *   CCSDS Command Header (8 bytes)
-                 *   Xbee address (1 byte)
-                 */
-
-                debug_serial.println("Received ResetCtr Cmd");
-
-                break;
-            case COMMAND_REBOOT:
-                // Requests reboot
-                debug_serial.println("Received Reboot Cmd");
-
-                // set the reboot timer
-                wdt_enable (WDTO_1S);
-
-                break;
-            case COMMAND_DISARM:
-                debug_serial.println("received disarm command");
-
-                // extract the desintation address from the command
-                extractFromTlm(destAddr, data, 8);
-
-                // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff, DISARM_RESPONSE);
-
-                // send the HK packet via xbee and log it
-                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-
-                disarm();
-
-                break;
-            case COMMAND_KEEPALIVE:
-                debug_serial.println("Received keepalive packet");
-
-                // extract the desintation address from the command
-                extractFromTlm(destAddr, data, 8);
-
-                // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff, KEEPALIVE_RESPONSE);
-
-                // send the HK packet via xbee and log it
-                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-
-                break;
-            case COMMAND_EXTEND_ACTUATOR:
-                debug_serial.println("Received extend actuator command");
-
-                // extract the desintation address from the command
-                extractFromTlm(destAddr, data, 8);
-
-                // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
-
-                // send the HK packet via xbee and log it
-                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-
-                extend(6);
-
-                break;
-            case COMMAND_RETRACT_ACTUATOR:
-                debug_serial.println("Received retract actuator command");
-
-                // extract the desintation address from the command
-                extractFromTlm(destAddr, data, 8);
-
-                // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
-
-                // send the HK packet via xbee and log it
-                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-
-                retract(30);
-
-                break;
-            case REQUEST_ACTUATOR_STATUS:
-                debug_serial.println("Received actuator status request");
-
-                // extract the desintation address from the command
-                extractFromTlm(destAddr, data, 8);
-
-                // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff,
-                        (extended) ? EXTEND_RESPONSE : RETRACT_RESPONSE);
-
-                // send the HK packet via xbee and log it
-                xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-
-                break;
-            default:
-                debug_serial.print("unrecognized fcn code ");
-                debug_serial.println(FcnCode, HEX);
-        }    // end switch(FcnCode)
-
-    }    // if(getPacketType(data) && _APID == CAM_CMD_APID)
-    else
-    {
-        debug_serial.print("Unrecognized ");
-        debug_serial.print(getPacketType(data));
-        debug_serial.print(" pkt apid 0x");
-        debug_serial.println(_APID, HEX);
-    }
-}
-
-void xbee_send_and_log(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
+void send_and_log(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
 {
     /*  send_and_log()
      *
      *  If the destination address is 0, calls radio_send_and_log. Otherwise
-     *  calls xbee_send_and_log
+     *  calls send_and_log
      *
      */
     // send the HK packet via xbee and log it
@@ -873,6 +893,7 @@ void log_imu(struct IMUData_s IMUData, File IMULogFile)
 
     IMULogFile.flush();
 }
+
 void log_env(struct ENVData_s ENVData, File ENVLogFile)
 {
     /*  log_env()
@@ -997,6 +1018,31 @@ void read_imu(struct IMUData_s *IMUData)
 
 }
 
+uint16_t create_HK_payload(uint8_t Pkt_Buff[])
+{
+    /*  create_HK_pkt()
+     *
+     *  Creates an HK packet containing the values of all the interface counters.
+     *  Packet data is filled into the memory passed in as the argument. This function
+     *  assumes that the buffer is large enough to hold this packet.
+     *
+     */
+
+    // initalize counter to record length of packet
+    uint16_t payloadSize = 0;
+
+    // Add counter values to the pkt
+    payloadSize = addIntToTlm(CmdExeCtr, Pkt_Buff, payloadSize); // Add counter of sent packets to message
+    payloadSize = addIntToTlm(CmdRejCtr, Pkt_Buff, payloadSize); // Add counter of sent packets to message
+    payloadSize = addIntToTlm(ccsds_xbee.getRcvdByteCtr(), Pkt_Buff,
+            payloadSize); // Add counter of sent packets to message
+    payloadSize = addIntToTlm(ccsds_xbee.getSentByteCtr(), Pkt_Buff,
+            payloadSize); // Add counter of sent packets to message
+    payloadSize = addIntToTlm(millis() / 1000L, Pkt_Buff, payloadSize); // Timer
+
+    return payloadSize;
+}
+
 uint16_t create_ENV_payload(uint8_t payload[], struct ENVData_s ENVData)
 {
     /*  create_ENV_pkt()
@@ -1099,26 +1145,6 @@ uint16_t create_INIT_payload(uint8_t Pkt_Buff[], struct InitStat_s InitStat)
 
     return payloadSize;
 
-}
-
-void send_and_log(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
-{
-    /*  send_and_log()
-     *
-     *  If the destination address is 0, calls radio_send_and_log. Otherwise
-     *  calls xbee_send_and_log
-     *
-     */
-    if (dest_addr == 0)
-    {
-        // send packet via the radio and log it
-        radio_send_and_log(data, data_len);
-    }
-    else
-    {
-        // send the HK packet via xbee and log it
-        ccsds_xbee.sendRawData(dest_addr, data, data_len);
-    }
 }
 
 // MARS-specific functions
