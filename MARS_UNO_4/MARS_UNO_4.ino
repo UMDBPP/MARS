@@ -325,7 +325,7 @@ void setup(void)
     //MicroSD
     // appends to current file
     // NOTE: Filenames must be shorter than 8 characters
-    sendCmdMsg(LINK_XBEE_ADDRESS, COMMAND_RETRACT_ACTUATOR, NULL, 0);    // sends message to mars 2 to release
+    sendCmdMsg(5, COMMAND_RETRACT_ACTUATOR, NULL, 0);    // sends message to mars 2 to release
 
 #ifdef mars_1
     pinMode(ACTUATOR_CONTROL_PIN, OUTPUT);
