@@ -311,7 +311,7 @@ void setup()
      *   of the adafruit xbee library
      */
     InitStat.xbeeStatus = ccsds_xbee.init(XBEE_ADDR, XBEE_PAN_ID,
-    xbee_serial);
+    xbee_serial, debug_serial);
     if (!InitStat.xbeeStatus)
     {
         debug_serial.println(F("XBee Initialized!"));
