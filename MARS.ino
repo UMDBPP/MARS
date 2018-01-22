@@ -1,5 +1,7 @@
+#include <avr/wdt.h>  // watchdog timer
 #include <ccsds_xbee.h>
 #include "RTClib.h"  // RTC and SoftRTC
+#include <SD.h>
 
 #define LINK_XBEE_ADDR 0x0002
 #define XBEE_PAN_ID 0x0B0B // XBee PAN address (must be the same for all xbees)
@@ -35,7 +37,7 @@
 #define DISARM_RESPONSE 0xE5
 #define ARM_RESPONSE 0xE6
 
-#define CYCLE_DELAY 1000 // time between execution cycles [ms]
+#define CYCLE_DELAY 100 // time between execution cycles [ms]
 
 #define green_mars
 
@@ -81,10 +83,84 @@ long timeout_seconds = 1200;
 
 #endif
 
-// create library types
-RTC_DS1307 rtc;    // real time clock (for logging with timestamps)
-RTC_Millis SoftRTC;    // This is the millis()-based software RTC
+//// Interface counters
+// counters to track what data comes into/out of link
+uint16_t CmdExeCtr;
+uint16_t CmdRejCtr;
+uint32_t XbeeRcvdByteCtr;
+uint32_t XbeeSentByteCtr;
+
+//// Declare objects
+Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x29);
+Adafruit_MCP9808 tempsensor = Adafruit_MCP9808();
+RTC_DS1307 rtc;  // real time clock (for logging with timestamps)
+RTC_Millis SoftRTC;   // This is the millis()-based software RTC
+Adafruit_BME280 bme;
+Adafruit_ADS1015 ads(0x4A);
+SSC ssc(0x28, 255);
 CCSDS_Xbee ccsds_xbee;
+
+//// Data Structures
+// imu data
+struct IMUData_s
+{
+        uint8_t system_cal;
+        uint8_t accel_cal;
+        uint8_t gyro_cal;
+        uint8_t mag_cal;
+        float accel_x;
+        float accel_y;
+        float accel_z;
+        float gyro_x;
+        float gyro_y;
+        float gyro_z;
+        float mag_x;
+        float mag_y;
+        float mag_z;
+};
+
+// power data
+struct PWRData_s
+{
+        float batt_volt;
+        float i_consump;
+};
+
+// environmental data
+struct ENVData_s
+{
+        float bme_pres;
+        float bme_temp;
+        float bme_humid;
+        float ssc_pres;
+        float ssc_temp;
+        float bno_temp;
+        float mcp_temp;
+};
+// environmental data
+struct InitStat_s
+{
+        uint8_t xbeeStatus;
+        uint8_t rtc_running;
+        uint8_t rtc_start;
+        uint8_t BNO_init;
+        uint8_t MCP_init;
+        uint8_t BME_init;
+        uint8_t SSC_init;
+        uint8_t SD_detected;
+};
+
+InitStat_s InitStat;
+
+//// Files
+// interface logging files
+File xbeeLogFile;
+File radioLogFile;
+File initLogFile;
+// data logging files
+File IMULogFile;
+File ENVLogFile;
+File PWRLogFile;
 
 // pins to control actuator polarity
 int HBRIDGE_DRIVER_3_4_ENABLE_PIN = 11;
@@ -98,29 +174,54 @@ uint32_t start_millis = 0;
 
 void setup()
 {
+    /* setup()
+     *
+     * Disables watchdog timer (in case its on)
+     * Initalizes all the link hardware/software including:
+     *   Serial
+     *   Xbee
+     *   RTC
+     *   SoftRTC
+     *   BNO
+     *   MCP
+     *   BME
+     *   SSC
+     *   ADS
+     *   SD card
+     *   Log files
+     */
+
+    // disable the watchdog timer immediately in case it was on because of a
+    // commanded reboot
+    wdt_disable();
+
     //// Init serial ports:
     /*  aliases defined above are used to reduce confusion about which serial
      *    is connected to what interface
      *  xbee and radio serial are lower baud rates because the hardware
      *    defaults to that baud rate. higher baud rates need to be tested
-     *    before they"re used with those devices
+     *    before they're used with those devices
      */
-    xbee_serial.begin(9600);
     debug_serial.begin(250000);
+    xbee_serial.begin(9600);
+
+    debug_serial.println("Begin MARS Init");
 
     //// RTC
     /* The RTC is used so that the log files contain timestamps. If the RTC
      *  is not running (because no battery is inserted) the RTC will be initalized
      *  to the time that this sketch was compiled at.
      */
-    if (!rtc.begin())
+    InitStat.rtc_start = rtc.begin();
+    if (!InitStat.rtc_start)
     {
         Serial.println("RTC NOT detected.");
     }
     else
     {
         Serial.println("RTC detected!");
-        if (!rtc.isrunning())
+        InitStat.rtc_running = rtc.isrunning();
+        if (!InitStat.rtc_running)
         {
             debug_serial.println("RTC is NOT running!");
             // following line sets the RTC to the date & time this sketch was compiled
@@ -131,18 +232,165 @@ void setup()
     }
 
     //// SoftRTC (for subsecond precision)
-    SoftRTC.begin(rtc.now());    // Initialize SoftRTC to the current time
-    start_millis = millis();    // get the current millisecond count
+    SoftRTC.begin(rtc.now());  // Initialize SoftRTC to the current time
+    start_millis = millis();  // get the current millisecond count
 
-    if (!ccsds_xbee.init(XBEE_ADDR, XBEE_PAN_ID, xbee_serial, debug_serial))
+    //// Init SD card
+    /* The SD card is used to store all of the log files.
+     */
+    SPI.begin();
+    pinMode(53, OUTPUT);
+    InitStat.SD_detected = SD.begin(53);
+    if (!InitStat.SD_detected)
     {
-        debug_serial.print("XBee Initialized on XBee address ");
-        debug_serial.println(XBEE_ADDR);
+        debug_serial.println("SD Card NOT detected.");
     }
     else
     {
-        debug_serial.println("XBee Not Initialized");
+        debug_serial.println("SD Card detected!");
     }
+
+    //// Open log files
+    /* Link will log to 3 files, one for I/O to the xbee, one for I/O to the radio,
+     *  and one for recording its initialization status each time it starts up.
+     *  NOTE: Filenames must be shorter than 8 characters
+     */
+
+    xbeeLogFile = SD.open("XBEE_LOG.txt", FILE_WRITE);
+    delay(10);
+    radioLogFile = SD.open("RDIO_LOG.txt", FILE_WRITE);
+    delay(10);
+
+    // for data files, write a header
+    initLogFile = SD.open("INIT_LOG.txt", FILE_WRITE);
+    initLogFile.println("DateTime,RTCStart,RTCRun,BNO,BME,MCP,SSC,Xbee");
+    initLogFile.flush();
+    delay(10);
+    IMULogFile = SD.open("IMU_LOG.txt", FILE_WRITE);
+    IMULogFile.println(
+            "DateTime,SystemCal[0-3],AccelCal[0-3],GyroCal[0-3],MagCal[0-3],AccelX[m/s^2],AccelY[m/s^2],AccelZ[m/s^2],GyroX[rad/s],GyroY[rad/s],GyroZ[rad/s],MagX[uT],MagY[uT],MagZ[uT]");
+    IMULogFile.flush();
+    delay(10);
+    PWRLogFile = SD.open("PWR_LOG.txt", FILE_WRITE);
+    PWRLogFile.println("DateTime,BatteryVoltage[V],CurrentConsumption[A]");
+    PWRLogFile.flush();
+    delay(10);
+    ENVLogFile = SD.open("ENV_LOG.txt", FILE_WRITE);
+    ENVLogFile.println(
+            "DateTime,BMEPressure[hPa],BMETemp[degC],BMEHumidity[%],SSCPressure[PSI],SSCTemp[degC],BNOTemp[degC],MCPTemp[degC]");
+    ENVLogFile.flush();
+    delay(10);
+
+    //// Init Xbee
+    /* InitXbee() will configure the attached xbee so that it can talk to
+     *   xbees which also use this library. It also handles the initalization
+     *   of the adafruit xbee library
+     */
+    InitStat.xbeeStatus = ccsds_xbee.init(XBEE_ADDR, XBEE_PAN_ID,
+    xbee_serial);
+    if (!InitStat.xbeeStatus)
+    {
+        debug_serial.println(F("XBee Initialized!"));
+    }
+    else
+    {
+        debug_serial.print(F("XBee Failed to Initialize with Error Code: "));
+        debug_serial.println(InitStat.xbeeStatus);
+    }
+
+    ccsds_xbee.add_rtc(rtc);
+    ccsds_xbee.start_logging(xbeeLogFile);
+
+    //// BNO
+    InitStat.BNO_init = bno.begin();
+    if (!InitStat.BNO_init)
+    {
+        debug_serial.println("BNO055 NOT detected.");
+    }
+    else
+    {
+        debug_serial.println("BNO055 detected!");
+    }
+    delay(500);
+    bno.setExtCrystalUse(true);
+
+    //// MCP9808
+    InitStat.MCP_init = tempsensor.begin(0x18);
+    if (!InitStat.MCP_init)
+    {
+        debug_serial.println("MCP9808 NOT detected.");
+    }
+    else
+    {
+        debug_serial.println("MCP9808 detected!");
+    }
+
+    //// Init BME
+    // Temp/pressure/humidity sensor
+    InitStat.BME_init = bme.begin(0x76);
+    if (!InitStat.BME_init)
+    {
+        debug_serial.println("BME280 NOT detected.");
+    }
+    else
+    {
+        debug_serial.println("BME280 detected!");
+    }
+
+    //// Init SSC
+    //  set min / max reading and pressure, see datasheet for the values for your
+    //  sensor
+    ssc.setMinRaw(0);
+    ssc.setMaxRaw(16383);
+    ssc.setMinPressure(0.0);
+    ssc.setMaxPressure(30);
+    //  start the sensor
+    InitStat.SSC_init = ssc.start();
+    if (!InitStat.SSC_init)
+    {
+        debug_serial.println("SSC started ");
+    }
+    else
+    {
+        debug_serial.println("SSC failed!");
+    }
+
+    //// Init ADS
+    // ADC, used for current consumption/battery voltage
+    ads.begin();
+    ads.setGain(GAIN_ONE);
+    debug_serial.println("Initialized ADS1015");
+
+    //// set interface counters to zero
+    CmdExeCtr = 0;
+    CmdRejCtr = 0;
+    RadioRcvdByteCtr = 0;
+    XbeeRcvdByteCtr = 0;
+    RadioSentByteCtr = 0;
+    XbeeSentByteCtr = 0;
+
+    // write entry in init log file
+    print_time(initLogFile);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.rtc_start);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.rtc_running);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.BNO_init);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.BME_init);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.MCP_init);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.SSC_init);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.xbeeStatus);
+    initLogFile.print(", ");
+    initLogFile.print(InitStat.SD_detected);
+    initLogFile.println();
+    initLogFile.close();
+
+    debug_serial.println(F("MARS Initialized"));
 
     debug_serial.println("Setting pins...");
 
@@ -201,73 +449,174 @@ void loop()
         }
     }
 
-    uint16_t pktLength = 0;
-    uint8_t Pkt_Buff[100];
-    uint8_t destAddr = LINK_XBEE_ADDR;
-
-    // create a pkt
-    pktLength = create_Status_pkt(Pkt_Buff, (extended) ? EXTEND_RESPONSE : RETRACT_RESPONSE);
-
-    // send the HK packet via xbee and log it
-    xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
-
     // wait a bit
     delay(CYCLE_DELAY);
 }
 
-void arm()
+void command_response(uint8_t data[], uint8_t data_len,
+        struct IMUData_s IMUData, struct ENVData_s ENVData,
+        struct PWRData_s PWRData)
 {
-    armed = true;
-    digitalWrite(HBRIDGE_DRIVER_3_4_ENABLE_PIN, HIGH);
-}
+    /*  command_response()
+     *
+     *  given an array of data (presumably containing a CCSDS packet), check if:
+     *    the packet is a command packet
+     *    the APID is the LINK command packet APID
+     *    the checksum in the header is correct
+     *  if so, process it
+     *  otherwise, reject it
+     */
 
-void disarm()
-{
-    armed = false;
-    digitalWrite(HBRIDGE_DRIVER_3_4_ENABLE_PIN, LOW);
-}
+    // get the APID (the field which identifies the type of packet)
+    uint16_t _APID = getAPID(data);
 
-void extend(int pulse_seconds)
-{
-    debug_serial.print("Extending actuator for ");
-    debug_serial.print(pulse_seconds);
-    debug_serial.println(" seconds.");
-    controlActuator(1, pulse_seconds);
-}
-
-void retract(int pulse_seconds)
-{
-    debug_serial.print("Retracting actuator for ");
-    debug_serial.print(pulse_seconds);
-    debug_serial.println(" seconds.");
-    controlActuator(-1, pulse_seconds);
-}
-
-void controlActuator(int direction, int pulse_seconds)
-{
-    if (direction < 0)
+    if (_APID != LINK_CMD_APID)
     {
-        digitalWrite(HBRIDGE_DRIVER_3_INPUT_PIN, LOW);
-        digitalWrite(HBRIDGE_DRIVER_4_INPUT_PIN, HIGH);
+        debug_serial.print("Unrecognized apid 0x");
+        debug_serial.println(_APID, HEX);
+        return;
     }
-    else if (direction > 0)
+    if (!getPacketType(data))
     {
-        digitalWrite(HBRIDGE_DRIVER_3_INPUT_PIN, HIGH);
-        digitalWrite(HBRIDGE_DRIVER_4_INPUT_PIN, LOW);
+        debug_serial.print("Not a command packet");
+        return;
     }
 
-    delay(pulse_seconds * 1000);
+    // validate command checksum
+    if (!validateChecksum(data))
+    {
+        Serial.println("Command checksum doesn't validate");
+        CmdRejCtr++;
+        return;
+    }
 
-    digitalWrite(HBRIDGE_DRIVER_3_INPUT_PIN, LOW);
-    digitalWrite(HBRIDGE_DRIVER_4_INPUT_PIN, LOW);
-}
+    uint8_t FLTR_TBL_Buff[FILT_TBL_NUM_EL * 2 + 12];
+    uint8_t Pkt_Buff[100];
+    uint8_t payload_buff[100];
+
+    // respond to the command depending on what type of command it is
+    switch (getCmdFunctionCode(data))
+    {
+
+        // NoOp Cmd
+        case LINK_NOOP_CMD:
+        {
+            // No action other than to increment the interface counters
+
+            debug_serial.println("Received NoOp Cmd");
+
+            // increment the cmd executed counter
+            CmdExeCtr++;
+            break;
+        }
+            // REQ_Name Cmd
+        case REQNAME_FCNCODE:
+        {
+            /*
+             * This command requests that a packet containing the payload's
+             * name be sent to a specific xbee. The format of the command is:
+             *   CCSDS Command Header (8 bytes)
+             *   Xbee address (uint8_t)
+             * There is one parameter associated with this command, the address
+             * of the xbee to send the Name message to. The format of the Name message
+             * which is sent out is:
+             *   CCSDS Telemetry Header (12 bytes)
+             *   Payload Name (string, 8 bytes)
+             */
+            debug_serial.print("Received Name Cmd to addr ");
+
+            // define variables to process the command
+            uint8_t NamedestAddr = 0;
+            uint16_t pktLength = 0;
+            uint8_t payloadLength = 0;
+            int success_flg = 0;
+
+            // define buffer to create the response in
+            uint8_t Name_Payload_Buff[PKT_MAX_LEN];
+
+            // extract the desintation address from the command
+            extractFromTlm(NamedestAddr, data, 8);
+            debug_serial.println(NamedestAddr);
+
+            // Use sprintf to pad/trim the string if the payload name isn't
+            // exactly 8 characters
+            char payloadname[8];
+            sprintf(payloadname, "%8.8s", PAYLOAD_NAME);
+
+            // print the name to debug
+            debug_serial.println(payloadname);
+
+            // add the information to the buffer
+            payloadLength = addStrToTlm(payloadname, Name_Payload_Buff,
+                    payloadLength);
+
+            // send the telemetry message by adding the buffer to the header
+            success_flg = ccsds_xbee.sendTlmMsg(NamedestAddr, NAME_APID,
+                    Name_Payload_Buff, payloadLength);
+
+            if (success_flg > 0)
+            {
+                // increment the cmd executed counter
+                CmdExeCtr++;
+            }
+            else
+            {
+                CmdRejCtr++;
+            }
+            break;
+        }
+            // REQ_HK
+        case LINK_HKREQ_CMD:
+        {
+            // Requests that an HK packet be sent to the ground
+            debug_serial.print("Received HKReq Cmd to addr ");
+            /*  Command format:
+             *   CCSDS Command Header (8 bytes)
+             *   Xbee address (1 byte) (or 0 if Gnd)
+             */
+            uint8_t destAddr = 0;
+            uint16_t pktLength = 0;
+            uint8_t payloadLength = 0;
+
+            // extract the desintation address from the command
+            extractFromTlm(destAddr, data, 8);
+            debug_serial.println(destAddr);
+
+            // create a HK pkt
+            payloadLength = create_HK_payload(payload_buff);
+
+            pktLength = ccsds_xbee.createTlmMsg(Pkt_Buff, LINK_HK_APID,
+                    payload_buff, payloadLength);
+            if (pktLength > 0)
+            {
+
+                // send the data
+                send_and_log(destAddr, Pkt_Buff, pktLength);
+            }
+
+            // increment the cmd executed counter
+            CmdExeCtr++;
+            break;
+        }
+            // unrecognized fcn code
+        default:
+        {
+            debug_serial.print("unrecognized fcn code ");
+            debug_serial.println(getCmdFunctionCode(data), HEX);
+
+            // reject command
+            CmdRejCtr++;
+        }
+    } // end switch(FcnCode)
+
+} // end command_response()
 
 void command_response(uint8_t data[], uint8_t data_len)
 {
     /*  command_response()
      *
      *  given an array of data (presumably containing a CCSDS packet), check if the
-     *  packet is a CAMERA command packet, and if so, process it
+     *  packet is a command packet, and if so, process it
      */
 
     debug_serial.print("Rcvd: ");
@@ -315,6 +664,9 @@ void command_response(uint8_t data[], uint8_t data_len)
             case COMMAND_REBOOT:
                 // Requests reboot
                 debug_serial.println("Received Reboot Cmd");
+
+                // set the reboot timer
+                wdt_enable (WDTO_1S);
 
                 break;
             case COMMAND_DISARM:
@@ -382,7 +734,8 @@ void command_response(uint8_t data[], uint8_t data_len)
                 extractFromTlm(destAddr, data, 8);
 
                 // create a pkt
-                pktLength = create_Status_pkt(Pkt_Buff, (extended) ? EXTEND_RESPONSE : RETRACT_RESPONSE);
+                pktLength = create_Status_pkt(Pkt_Buff,
+                        (extended) ? EXTEND_RESPONSE : RETRACT_RESPONSE);
 
                 // send the HK packet via xbee and log it
                 xbee_send_and_log(destAddr, Pkt_Buff, pktLength);
@@ -426,16 +779,16 @@ uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
      *  Packet data is filled into the memory passed in as the argument
      *
      */
-// get the current time from the RTC
+    // get the current time from the RTC
     DateTime now = rtc.now();
 
-// initalize counter to record length of packet
+    // initalize counter to record length of packet
     uint16_t payloadSize = 0;
 
-// add length of primary header
+    // add length of primary header
     payloadSize += sizeof(CCSDS_PriHdr_t);
 
-// Populate primary header fields:
+    // Populate primary header fields:
     setAPID(HK_Pkt_Buff, STATUS_APID);
     setSecHdrFlg(HK_Pkt_Buff, 1);
     setPacketType(HK_Pkt_Buff, 0);
@@ -443,19 +796,376 @@ uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
     setSeqCtr(HK_Pkt_Buff, 0);
     setSeqFlg(HK_Pkt_Buff, 0);
 
-// add length of secondary header
+    // add length of secondary header
     payloadSize += sizeof(CCSDS_TlmSecHdr_t);
 
-// Populate the secondary header fields:
+    // Populate the secondary header fields:
     setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
     setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
 
-// Add counter values to the pkt
+    // Add counter values to the pkt
     payloadSize = addIntToTlm(message, HK_Pkt_Buff, payloadSize);
 
-// fill the length field
+    // fill the length field
     setPacketLength(HK_Pkt_Buff, payloadSize);
 
     return payloadSize;
 
+}
+
+void print_time(File file)
+{
+    /*  print_time()
+     *
+     *  Prints the current time to the given log file
+     */
+
+    // get the current time from the RTC
+    DateTime now = SoftRTC.now();
+    uint32_t nowMS = millis();
+
+    // print a datestamp to the file
+    char buf[50];
+    sprintf(buf, "%02d/%02d/%02d %02d:%02d:%02d.%03d", now.day(), now.month(),
+            now.year(), now.hour(), now.minute(), now.second(),
+            (nowMS - start_millis) % 1000);  // print milliseconds);
+    file.print(buf);
+}
+
+void log_imu(struct IMUData_s IMUData, File IMULogFile)
+{
+    /*  log_imu()
+     *
+     *  Writes the IMU data to a log file with a timestamp.
+     *
+     */
+
+    // print the time to the file
+    print_time(IMULogFile);
+
+    // print the sensor values
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.system_cal);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.accel_cal);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.gyro_cal);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.mag_cal);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.accel_x);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.accel_y);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.accel_z);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.gyro_x);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.gyro_y);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.gyro_z);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.mag_x);
+    IMULogFile.print(", ");
+    IMULogFile.print(IMUData.mag_y);
+    IMULogFile.print(", ");
+    IMULogFile.println(IMUData.mag_z);
+
+    IMULogFile.flush();
+}
+void log_env(struct ENVData_s ENVData, File ENVLogFile)
+{
+    /*  log_env()
+     *
+     *  Writes the ENV data to a log file with a timestamp.
+     *
+     */
+
+    // print the time to the file
+    print_time(ENVLogFile);
+
+    // print the sensor values
+    ENVLogFile.print(", ");
+    ENVLogFile.print(ENVData.bme_pres);
+    ENVLogFile.print(", ");
+    ENVLogFile.print(ENVData.bme_temp);
+    ENVLogFile.print(", ");
+    ENVLogFile.print(ENVData.bme_humid);
+    ENVLogFile.print(", ");
+    ENVLogFile.print(ENVData.ssc_pres);
+    ENVLogFile.print(", ");
+    ENVLogFile.print(ENVData.ssc_temp);
+    ENVLogFile.print(", ");
+    ENVLogFile.print(ENVData.bno_temp);
+    ENVLogFile.print(", ");
+    ENVLogFile.println(ENVData.mcp_temp);
+
+    ENVLogFile.flush();
+}
+
+void log_pwr(struct PWRData_s PWRData, File PWRLogFile)
+{
+    /*  log_pwr()
+     *
+     *  Writes the PWR data to a log file with a timestamp.
+     *
+     */
+
+    // print the time to the file
+    print_time(PWRLogFile);
+
+    // print the sensor values
+    PWRLogFile.print(", ");
+    PWRLogFile.print(PWRData.batt_volt, 4);
+    PWRLogFile.print(", ");
+    PWRLogFile.println(PWRData.i_consump, 4);
+
+    PWRLogFile.flush();
+}
+
+void read_env(struct ENVData_s *ENVData)
+{
+    /*  read_env()
+     *
+     *  Reads all of the environmental sensors and stores data in
+     *  a structure.
+     *
+     */
+
+    //BME280
+    ENVData->bme_pres = bme.readPressure() / 100.0F; // hPa
+    ENVData->bme_temp = bme.readTemperature(); // degC
+    ENVData->bme_humid = bme.readHumidity(); // %
+    /*
+     * This is causing LINK to not respond to commands... not sure why
+     //  SSC
+     ssc.update();
+     ENVData->ssc_pres = ssc.pressure(); // PSI
+     ENVData->ssc_temp = ssc.temperature(); // degC
+     */
+    // BNO
+    ENVData->bno_temp = bno.getTemp();
+
+    //MCP9808
+    ENVData->mcp_temp = tempsensor.readTempC(); // degC
+}
+
+void read_pwr(struct PWRData_s *PWRData)
+{
+    /*  read_pwr()
+     *
+     *  Reads all of the power sensors and stores data in
+     *  a structure.
+     *
+     */
+    PWRData->batt_volt = ((float) ads.readADC_SingleEnded(2)) * 0.002 * 3.0606; // V
+    PWRData->i_consump = (((float) ads.readADC_SingleEnded(3)) * 0.002 - 2.5)
+            * 10;
+}
+
+void read_imu(struct IMUData_s *IMUData)
+{
+    /*  read_imu()
+     *
+     *  Reads all of the IMU sensors and stores data in
+     *  a structure.
+     *
+     */
+    uint8_t system_cal, gyro_cal, accel_cal, mag_cal = 0;
+    bno.getCalibration(&system_cal, &gyro_cal, &accel_cal, &mag_cal);
+
+    // get measurements
+    imu::Vector < 3 > mag = bno.getVector(Adafruit_BNO055::VECTOR_MAGNETOMETER); // (values in uT, micro Teslas)
+    imu::Vector < 3 > gyro = bno.getVector(Adafruit_BNO055::VECTOR_GYROSCOPE); // (values in rps, radians per second)
+    imu::Vector < 3 > accel = bno.getVector(
+            Adafruit_BNO055::VECTOR_ACCELEROMETER); // (values in m/s^2)
+
+    // assign them into global variables
+    IMUData->system_cal = system_cal;
+    IMUData->accel_cal = accel_cal;
+    IMUData->gyro_cal = gyro_cal;
+    IMUData->mag_cal = mag_cal;
+    IMUData->accel_x = accel.x();
+    IMUData->accel_y = accel.y();
+    IMUData->accel_z = accel.z();
+    IMUData->gyro_x = gyro.x();
+    IMUData->gyro_y = gyro.y();
+    IMUData->gyro_z = gyro.z();
+    IMUData->mag_x = mag.x();
+    IMUData->mag_y = mag.y();
+    IMUData->mag_z = mag.z();
+
+}
+
+uint16_t create_ENV_payload(uint8_t payload[], struct ENVData_s ENVData)
+{
+    /*  create_ENV_pkt()
+     *
+     *  Creates an ENV packet containing the values of all environmental sensors.
+     *  Packet data is filled into the memory passed in as the argument. This function
+     *  assumes that the buffer is large enough to hold this packet.
+     *
+     */
+
+    uint16_t payloadSize = 0;
+    // Add counter values to the pkt
+    payloadSize = addFloatToTlm(ENVData.bme_pres, payload, payloadSize); // Add bme pressure to message [Float]
+    payloadSize = addFloatToTlm(ENVData.bme_temp, payload, payloadSize); // Add bme temperature to message [Float]
+    payloadSize = addFloatToTlm(ENVData.bme_humid, payload, payloadSize); // Add bme humidity to message [Float]
+    payloadSize = addFloatToTlm(ENVData.ssc_pres, payload, payloadSize); // Add ssc pressure to message [Float]
+    payloadSize = addFloatToTlm(ENVData.ssc_temp, payload, payloadSize); // Add ssc temperature to messsage [Float]
+    payloadSize = addFloatToTlm(ENVData.bno_temp, payload, payloadSize); // Add bno temperature to message [Float]
+    payloadSize = addFloatToTlm(ENVData.mcp_temp, payload, payloadSize); // Add mcp temperature to message [Float]
+
+    return payloadSize;
+
+}
+
+uint16_t create_PWR_payload(uint8_t Pkt_Buff[], struct PWRData_s PWRData)
+{
+    /*  create_PWR_pkt()
+     *
+     *  Creates an PWR packet containing the values of all the power/battery sensors.
+     *  Packet data is filled into the memory passed in as the argument. This function
+     *  assumes that the buffer is large enough to hold this packet.
+     *
+     */
+
+    // initalize counter to record length of packet
+    uint16_t payloadSize = 0;
+
+    // Add counter values to the pkt
+    payloadSize = addFloatToTlm(PWRData.batt_volt, Pkt_Buff, payloadSize); // Add battery voltage to message [Float]
+    payloadSize = addFloatToTlm(PWRData.i_consump, Pkt_Buff, payloadSize); // Add current consumption to message [Float]
+
+    return payloadSize;
+
+}
+
+uint16_t create_IMU_payload(uint8_t Pkt_Buff[], struct IMUData_s IMUData)
+{
+    /*  create_IMU_pkt()
+     *
+     *  Creates an IMU packet containing the values of all the IMU sensors.
+     *  Packet data is filled into the memory passed in as the argument. This function
+     *  assumes that the buffer is large enough to hold this packet.
+     *
+     */
+
+    // initalize counter to record length of packet
+    uint16_t payloadSize = 0;
+
+    // Add counter values to the pkt
+    payloadSize = addIntToTlm(IMUData.system_cal, Pkt_Buff, payloadSize); // Add system cal status to message [uint8_t]
+    payloadSize = addIntToTlm(IMUData.accel_cal, Pkt_Buff, payloadSize); // Add accelerometer cal status to message [uint8_t]
+    payloadSize = addIntToTlm(IMUData.gyro_cal, Pkt_Buff, payloadSize); // Add gyro cal status to message [uint8_t]
+    payloadSize = addIntToTlm(IMUData.mag_cal, Pkt_Buff, payloadSize); // Add mnagnetomter cal status to message [uint8_t]
+    payloadSize = addFloatToTlm(IMUData.accel_x, Pkt_Buff, payloadSize); // Add battery accelerometer x to message [Float]
+    payloadSize = addFloatToTlm(IMUData.accel_y, Pkt_Buff, payloadSize); // Add battery accelerometer y to message [Float]
+    payloadSize = addFloatToTlm(IMUData.accel_z, Pkt_Buff, payloadSize); // Add battery accelerometer z to message [Float]
+    payloadSize = addFloatToTlm(IMUData.gyro_x, Pkt_Buff, payloadSize); // Add battery accelerometer x to message [Float]
+    payloadSize = addFloatToTlm(IMUData.gyro_y, Pkt_Buff, payloadSize); // Add battery accelerometer y to message [Float]
+    payloadSize = addFloatToTlm(IMUData.gyro_z, Pkt_Buff, payloadSize); // Add battery accelerometer z to message [Float]
+    payloadSize = addFloatToTlm(IMUData.mag_x, Pkt_Buff, payloadSize); // Add battery accelerometer x to message [Float]
+    payloadSize = addFloatToTlm(IMUData.mag_y, Pkt_Buff, payloadSize); // Add battery accelerometer y to message [Float]
+    payloadSize = addFloatToTlm(IMUData.mag_z, Pkt_Buff, payloadSize); // Add battery accelerometer z to message [Float]
+
+    return payloadSize;
+
+}
+
+uint16_t create_INIT_payload(uint8_t Pkt_Buff[], struct InitStat_s InitStat)
+{
+    /*  create_IMU_pkt()
+     *
+     *  Creates an IMU packet containing the values of all the IMU sensors.
+     *  Packet data is filled into the memory passed in as the argument. This function
+     *  assumes that the buffer is large enough to hold this packet.
+     *
+     */
+
+    // initalize counter to record length of packet
+    uint16_t payloadSize = 0;
+
+    // Add counter values to the pkt
+    payloadSize = addIntToTlm(InitStat.xbeeStatus, Pkt_Buff, payloadSize); // Add system cal status to message [uint8_t]
+    payloadSize = addIntToTlm(InitStat.rtc_running, Pkt_Buff, payloadSize); // Add accelerometer cal status to message [uint8_t]
+    payloadSize = addIntToTlm(InitStat.rtc_start, Pkt_Buff, payloadSize); // Add gyro cal status to message [uint8_t]
+    payloadSize = addIntToTlm(InitStat.BNO_init, Pkt_Buff, payloadSize); // Add mnagnetomter cal status to message [uint8_t]
+    payloadSize = addIntToTlm(InitStat.MCP_init, Pkt_Buff, payloadSize); // Add mnagnetomter cal status to message [uint8_t]
+    payloadSize = addIntToTlm(InitStat.BME_init, Pkt_Buff, payloadSize); // Add mnagnetomter cal status to message [uint8_t]
+    payloadSize = addIntToTlm(InitStat.SSC_init, Pkt_Buff, payloadSize); // Add mnagnetomter cal status to message [uint8_t]
+    payloadSize = addIntToTlm(InitStat.SD_detected, Pkt_Buff, payloadSize); // Add mnagnetomter cal status to message [uint8_t]
+
+    return payloadSize;
+
+}
+
+void send_and_log(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
+{
+    /*  send_and_log()
+     *
+     *  If the destination address is 0, calls radio_send_and_log. Otherwise
+     *  calls xbee_send_and_log
+     *
+     */
+    if (dest_addr == 0)
+    {
+        // send packet via the radio and log it
+        radio_send_and_log(data, data_len);
+    }
+    else
+    {
+        // send the HK packet via xbee and log it
+        ccsds_xbee.sendRawData(dest_addr, data, data_len);
+    }
+}
+
+// MARS-specific functions
+
+void arm()
+{
+    armed = true;
+    digitalWrite(HBRIDGE_DRIVER_3_4_ENABLE_PIN, HIGH);
+}
+
+void disarm()
+{
+    armed = false;
+    digitalWrite(HBRIDGE_DRIVER_3_4_ENABLE_PIN, LOW);
+}
+
+void extend(int pulse_seconds)
+{
+    debug_serial.print("Extending actuator for ");
+    debug_serial.print(pulse_seconds);
+    debug_serial.println(" seconds.");
+    controlActuator(1, pulse_seconds);
+}
+
+void retract(int pulse_seconds)
+{
+    debug_serial.print("Retracting actuator for ");
+    debug_serial.print(pulse_seconds);
+    debug_serial.println(" seconds.");
+    controlActuator(-1, pulse_seconds);
+}
+
+void controlActuator(int direction, int pulse_seconds)
+{
+    if (direction < 0)
+    {
+        digitalWrite(HBRIDGE_DRIVER_3_INPUT_PIN, LOW);
+        digitalWrite(HBRIDGE_DRIVER_4_INPUT_PIN, HIGH);
+    }
+    else if (direction > 0)
+    {
+        digitalWrite(HBRIDGE_DRIVER_3_INPUT_PIN, HIGH);
+        digitalWrite(HBRIDGE_DRIVER_4_INPUT_PIN, LOW);
+    }
+
+    delay(pulse_seconds * 1000);
+
+    digitalWrite(HBRIDGE_DRIVER_3_INPUT_PIN, LOW);
+    digitalWrite(HBRIDGE_DRIVER_4_INPUT_PIN, LOW);
 }
