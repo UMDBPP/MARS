@@ -17,7 +17,7 @@
 #define PAYLOAD_NAME "MARS"
 // Must be no longer than 8 characters
 
-#define green_mars
+#define black_mars
 
 #define LINK_XBEE_ADDR 0x0002
 #define XBEE_PAN_ID 0x0B0B // XBee PAN address (must be the same for all xbees)
@@ -56,8 +56,8 @@
 
 #define CYCLE_DELAY 100 // time between execution cycles [ms]
 
-// green MARS is holding TARDIS on NS74
-#ifdef green_mars
+// black MARS is holding TARDIS on NS74
+#ifdef black_mars
 
 // seconds after which actuator will retract
 long timeout_seconds = 1020;
@@ -77,8 +77,8 @@ long timeout_seconds = 1020;
 
 #endif
 
-// black MARS is holding the entire payload string on NS74
-#ifdef black_mars
+// green MARS is holding the entire payload string on NS74
+#ifdef green_mars
 
 // seconds after which actuator will retract
 long timeout_seconds = 1200;
@@ -744,6 +744,10 @@ void command_response(uint8_t data[], uint8_t data_len,
             send_and_log(destAddr, Pkt_Buff, pktLength);
 
             retract(30);
+            #ifdef black_mars
+            pktLength = create_Command_pkt(Pkt_Buff,COMMAND_RETRACT_ACTUATOR);
+            send_and_log(5,Pkt_Buff,pktLength);
+            #endif
 
             break;
         }
@@ -810,6 +814,48 @@ uint16_t create_Status_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
 
     // Populate primary header fields:
     setAPID(HK_Pkt_Buff, STATUS_APID);
+    setSecHdrFlg(HK_Pkt_Buff, 1);
+    setPacketType(HK_Pkt_Buff, 0);
+    setVer(HK_Pkt_Buff, 0);
+    setSeqCtr(HK_Pkt_Buff, 0);
+    setSeqFlg(HK_Pkt_Buff, 0);
+
+    // add length of secondary header
+    payloadSize += sizeof(CCSDS_TlmSecHdr_t);
+
+    // Populate the secondary header fields:
+    setTlmTimeSec(HK_Pkt_Buff, now.unixtime() / 1000L);
+    setTlmTimeSubSec(HK_Pkt_Buff, now.unixtime() % 1000L);
+
+    // Add counter values to the pkt
+    payloadSize = addIntToTlm(message, HK_Pkt_Buff, payloadSize);
+
+    // fill the length field
+    setPacketLength(HK_Pkt_Buff, payloadSize);
+
+    return payloadSize;
+
+}
+
+uint16_t create_Command_pkt(uint8_t HK_Pkt_Buff[], uint8_t message)
+{
+    /*  create_IMU_pkt()
+     *
+     *  Creates an HK packet containing the values of all the interface counters.
+     *  Packet data is filled into the memory passed in as the argument
+     *
+     */
+    // get the current time from the RTC
+    DateTime now = rtc.now();
+
+    // initalize counter to record length of packet
+    uint16_t payloadSize = 0;
+
+    // add length of primary header
+    payloadSize += sizeof(CCSDS_PriHdr_t);
+
+    // Populate primary header fields:
+    setAPID(HK_Pkt_Buff, 500);
     setSecHdrFlg(HK_Pkt_Buff, 1);
     setPacketType(HK_Pkt_Buff, 0);
     setVer(HK_Pkt_Buff, 0);
