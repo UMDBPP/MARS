@@ -164,6 +164,7 @@ struct ENVData_s
         float bno_temp;
         float mcp_temp;
 };
+
 // environmental data
 struct InitStat_s
 {
@@ -498,7 +499,7 @@ void loop()
     }
 
     // if time on exceeds timeout seconds set in program constants, then retract actuator
-    if (extended)
+    if (!extended)
     {
         if (millis() > timeout_seconds * 1000)
         {
