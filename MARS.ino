@@ -17,7 +17,7 @@
 #define PAYLOAD_NAME "MARS"
 // Must be no longer than 8 characters
 
-#define black_mars
+#define green_mars
 
 #define LINK_XBEE_ADDR 0x0002
 #define XBEE_PAN_ID 0x0B0B // XBee PAN address (must be the same for all xbees)
@@ -498,15 +498,14 @@ void loop()
     }
 
     // if time on exceeds timeout seconds set in program constants, then retract actuator
-    if (extended)
+
+    if (millis() > timeout_seconds * 1000)
     {
-        if (millis() > timeout_seconds * 1000)
-        {
-            debug_serial.println("Timeout exceeded.");
-            retract(10);
-            extended = false;
-        }
+        debug_serial.println("Timeout exceeded.");
+        retract(10);
+        extended = false;
     }
+
 
     // wait a bit
     delay(CYCLE_DELAY);
