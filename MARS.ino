@@ -499,14 +499,11 @@ void loop()
     }
 
     // if time on exceeds timeout seconds set in program constants, then retract actuator
-    if (!extended)
+    if (millis() > timeout_seconds * 1000)
     {
-        if (millis() > timeout_seconds * 1000)
-        {
-            debug_serial.println("Timeout exceeded.");
-            retract(10);
-            extended = false;
-        }
+        debug_serial.println("Timeout exceeded.");
+        retract(10);
+        extended = false;
     }
 
     // wait a bit
@@ -536,6 +533,7 @@ void command_response(uint8_t data[], uint8_t data_len,
         debug_serial.println(_APID, HEX);
         return;
     }
+
     if (!getPacketType(data))
     {
         debug_serial.print("Not a command packet");
@@ -653,7 +651,7 @@ void command_response(uint8_t data[], uint8_t data_len,
             {
 
                 // send the data
-                send_and_log(destAddr, Pkt_Buff, pktLength);
+                xbee_send_packet(destAddr, Pkt_Buff, pktLength);
             }
 
             // increment the cmd executed counter
@@ -662,14 +660,17 @@ void command_response(uint8_t data[], uint8_t data_len,
         }
         case COMMAND_CLEAR_PACKET_COUNTERS:
         {
-            // Requests that an HK packet be sent to the specified xbee address
-            /*  Command format:
-             *   CCSDS Command Header (8 bytes)
-             *   Xbee address (1 byte)
-             */
+            // Requests that all of the interface data counters be reset to zero
 
             debug_serial.println("Received ResetCtr Cmd");
 
+            // reset all counters to zero
+            CmdExeCtr = 0;
+            CmdRejCtr = 0;
+            ccsds_xbee.resetCounters();
+
+            // increment the cmd executed counter
+            CmdExeCtr++;
             break;
         }
         case COMMAND_REBOOT:
@@ -692,8 +693,8 @@ void command_response(uint8_t data[], uint8_t data_len,
             // create a pkt
             pktLength = create_Status_pkt(Pkt_Buff, DISARM_RESPONSE);
 
-            // send the HK packet via xbee and log it
-            send_and_log(destAddr, Pkt_Buff, pktLength);
+            // send the response via xbee
+            xbee_send_packet(destAddr, Pkt_Buff, pktLength);
 
             disarm();
 
@@ -709,8 +710,8 @@ void command_response(uint8_t data[], uint8_t data_len,
             // create a pkt
             pktLength = create_Status_pkt(Pkt_Buff, KEEPALIVE_RESPONSE);
 
-            // send the HK packet via xbee and log it
-            send_and_log(destAddr, Pkt_Buff, pktLength);
+            // send the response via xbee
+            xbee_send_packet(destAddr, Pkt_Buff, pktLength);
 
             break;
         }
@@ -724,8 +725,8 @@ void command_response(uint8_t data[], uint8_t data_len,
             // create a pkt
             pktLength = create_Status_pkt(Pkt_Buff, EXTEND_RESPONSE);
 
-            // send the HK packet via xbee and log it
-            send_and_log(destAddr, Pkt_Buff, pktLength);
+            // send the response via xbee
+            xbee_send_packet(destAddr, Pkt_Buff, pktLength);
 
             extend(6);
 
@@ -741,14 +742,16 @@ void command_response(uint8_t data[], uint8_t data_len,
             // create a pkt
             pktLength = create_Status_pkt(Pkt_Buff, RETRACT_RESPONSE);
 
-            // send the HK packet via xbee and log it
-            send_and_log(destAddr, Pkt_Buff, pktLength);
+            // send the response via xbee
+            xbee_send_packet(destAddr, Pkt_Buff, pktLength);
 
             retract(30);
-            #ifdef black_mars
-            pktLength = create_Command_pkt(Pkt_Buff,COMMAND_RETRACT_ACTUATOR);
-            send_and_log(5,Pkt_Buff,pktLength);
-            #endif
+
+#ifdef black_mars
+            // send to other MARS unit
+            pktLength = create_Command_pkt(Pkt_Buff, COMMAND_RETRACT_ACTUATOR);
+            xbee_send_packet(5, Pkt_Buff, pktLength);
+#endif
 
             break;
         }
@@ -763,8 +766,8 @@ void command_response(uint8_t data[], uint8_t data_len,
             pktLength = create_Status_pkt(Pkt_Buff,
                     (extended) ? EXTEND_RESPONSE : RETRACT_RESPONSE);
 
-            // send the HK packet via xbee and log it
-            send_and_log(destAddr, Pkt_Buff, pktLength);
+            // send the response via xbee
+            xbee_send_packet(destAddr, Pkt_Buff, pktLength);
 
             break;
         }
@@ -781,15 +784,11 @@ void command_response(uint8_t data[], uint8_t data_len,
 
 } // end command_response()
 
-void send_and_log(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
+void xbee_send_packet(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
 {
-    /*  send_and_log()
-     *
-     *  If the destination address is 0, calls radio_send_and_log. Otherwise
-     *  calls send_and_log
-     *
+    /*  xbee_send_packet()
      */
-    // send the HK packet via xbee and log it
+    // send the packet via xbee and log it
     ccsds_xbee.sendRawData(dest_addr, data, data_len);
 
     debug_serial.print('Sent packet to ');
