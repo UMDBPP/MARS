@@ -10,7 +10,6 @@
 #include <Adafruit_BME280.h>
 #include <SD.h>
 #include <Adafruit_ADS1015.h>
-#include <ccsds_xbee.h>
 #include <SSC.h>
 
 // Name
@@ -125,7 +124,6 @@ RTC_Millis SoftRTC;   // This is the millis()-based software RTC
 Adafruit_BME280 bme;
 Adafruit_ADS1015 ads(0x4A);
 SSC ssc(0x28, 255);
-CCSDS_Xbee ccsds_xbee;
 
 //// Data Structures
 // imu data
@@ -611,7 +609,7 @@ void command_response(uint8_t data[], uint8_t data_len,
                     payloadLength);
 
             // send the telemetry message by adding the buffer to the header
-            success_flg = ccsds_xbee.sendTlmMsg(NamedestAddr, PAYLOAD_NAME_APID,
+                    xbee_serial.println(payloadname)
                     Name_Payload_Buff, payloadLength);
 
             if (success_flg > 0)
@@ -789,7 +787,8 @@ void xbee_send_packet(uint8_t dest_addr, uint8_t data[], uint8_t data_len)
     /*  xbee_send_packet()
      */
     // send the packet via xbee and log it
-    ccsds_xbee.sendRawData(dest_addr, data, data_len);
+    //ccsds_xbee.sendRawData(dest_addr, data, data_len);
+    xbee_serial.println(dest_addr, data, data_len)
 
     debug_serial.print('Sent packet to ');
     debug_serial.println(dest_addr);
@@ -1080,10 +1079,6 @@ uint16_t create_HK_payload(uint8_t Pkt_Buff[])
     // Add counter values to the pkt
     payloadSize = addIntToTlm(CmdExeCtr, Pkt_Buff, payloadSize); // Add counter of sent packets to message
     payloadSize = addIntToTlm(CmdRejCtr, Pkt_Buff, payloadSize); // Add counter of sent packets to message
-    payloadSize = addIntToTlm(ccsds_xbee.getRcvdByteCtr(), Pkt_Buff,
-            payloadSize); // Add counter of sent packets to message
-    payloadSize = addIntToTlm(ccsds_xbee.getSentByteCtr(), Pkt_Buff,
-            payloadSize); // Add counter of sent packets to message
     payloadSize = addIntToTlm(millis() / 1000L, Pkt_Buff, payloadSize); // Timer
 
     return payloadSize;
